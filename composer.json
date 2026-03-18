@@ -9,7 +9,7 @@
         "psr/log": "^1.0 || ^2.0 || ^3.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "pestphp/pest": "^2.0"
     },
     "autoload": {
         "psr-4": {
@@ -21,5 +21,10 @@
             "Ux2Dev\\Borica\\Tests\\": "tests/"
         }
     },
-    "minimum-stability": "stable"
+    "minimum-stability": "stable",
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    }
 }
