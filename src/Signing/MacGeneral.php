@@ -2,12 +2,15 @@
 declare(strict_types=1);
 namespace Ux2Dev\Borica\Signing;
 
+use Ux2Dev\Borica\Enum\SigningSchema;
 use Ux2Dev\Borica\Enum\TransactionType;
 
 class MacGeneral
 {
     private const REQUEST_FIELDS = [
-        'standard' => ['TERMINAL', 'TRTYPE', 'AMOUNT', 'CURRENCY', 'ORDER', 'TIMESTAMP', 'NONCE'],
+        'mac_general' => ['TERMINAL', 'TRTYPE', 'AMOUNT', 'CURRENCY', 'ORDER', 'TIMESTAMP', 'NONCE'],
+        'mac_extended' => ['TERMINAL', 'TRTYPE', 'AMOUNT', 'CURRENCY', 'ORDER', 'MERCHANT', 'TIMESTAMP', 'NONCE'],
+        'mac_advanced' => ['TERMINAL', 'TRTYPE', 'AMOUNT', 'CURRENCY', 'ORDER', 'TIMESTAMP', 'NONCE'],
         'status_check' => ['TERMINAL', 'TRTYPE', 'ORDER', 'NONCE'],
     ];
 
@@ -16,19 +19,32 @@ class MacGeneral
         'ORDER', 'RRN', 'INT_REF', 'PARES_STATUS', 'ECI', 'TIMESTAMP', 'NONCE',
     ];
 
-    public function buildRequestSigningData(TransactionType $type, array $fields): string
-    {
-        $fieldNames = $type === TransactionType::StatusCheck
-            ? self::REQUEST_FIELDS['status_check']
-            : self::REQUEST_FIELDS['standard'];
+    public function buildRequestSigningData(
+        TransactionType $type,
+        array $fields,
+        SigningSchema $schema = SigningSchema::MacGeneral,
+    ): string {
+        if ($type === TransactionType::StatusCheck) {
+            return $this->buildSigningString(self::REQUEST_FIELDS['status_check'], $fields);
+        }
+
+        $fieldNames = match ($schema) {
+            SigningSchema::MacGeneral => self::REQUEST_FIELDS['mac_general'],
+            SigningSchema::MacExtended => self::REQUEST_FIELDS['mac_extended'],
+            SigningSchema::MacAdvanced => self::REQUEST_FIELDS['mac_advanced'],
+        };
+
         $data = $this->buildSigningString($fieldNames, $fields);
-        if ($type !== TransactionType::StatusCheck) {
+
+        // Only MAC_GENERAL appends the trailing RFU dash
+        if ($schema === SigningSchema::MacGeneral) {
             $data .= '-';
         }
+
         return $data;
     }
 
-    public function buildResponseSigningData(TransactionType $type, array $fields): string
+    public function buildResponseSigningData(array $fields): string
     {
         $data = $this->buildSigningString(self::RESPONSE_FIELDS, $fields);
         $data .= '-';
@@ -43,7 +59,7 @@ class MacGeneral
             if ($value === '') {
                 $data .= '-';
             } else {
-                $data .= strlen($value) . $value;
+                $data .= mb_strlen($value, '8bit') . $value;
             }
         }
         return $data;

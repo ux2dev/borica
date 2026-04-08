@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 
+use Ux2Dev\Borica\Enum\SigningSchema;
 use Ux2Dev\Borica\Enum\TransactionType;
 use Ux2Dev\Borica\Signing\MacGeneral;
 
@@ -51,7 +52,7 @@ test('response signing string with all fields', function () {
         'INT_REF' => '1234567890ABCDEF', 'PARES_STATUS' => 'Y', 'ECI' => '05',
         'TIMESTAMP' => '20201012124757', 'NONCE' => '9EADBD70C0A5AFBAD3DF405902602F79',
     ];
-    $result = $this->macGeneral->buildResponseSigningData(TransactionType::Purchase, $fields);
+    $result = $this->macGeneral->buildResponseSigningData($fields);
     $expected = '10' . '200' . '6A12345' . '8V1800001' . '11' . '49.00' . '3BGN' .
         '6154744' . '12123456789012' . '161234567890ABCDEF' . '1Y' . '205' .
         '1420201012124757' . '329EADBD70C0A5AFBAD3DF405902602F79' . '-';
@@ -66,7 +67,7 @@ test('response signing string with missing fields', function () {
         'PARES_STATUS' => '', 'ECI' => '', 'TIMESTAMP' => '20201012124757',
         'NONCE' => '9EADBD70C0A5AFBAD3DF405902602F79',
     ];
-    $result = $this->macGeneral->buildResponseSigningData(TransactionType::Purchase, $fields);
+    $result = $this->macGeneral->buildResponseSigningData($fields);
     expect($result)->toContain('12' . '205' . '-' . '8V1800001');
 });
 
@@ -80,4 +81,47 @@ test('reversal request signing string', function () {
     // TERMINAL(8+V1800001) TRTYPE(2+24) AMOUNT(4+9.00) CURRENCY(3+BGN) ...
     $expected = '8V180000122449.003BGN61547441420201012124757329EADBD70C0A5AFBAD3DF405902602F79-';
     expect($result)->toBe($expected);
+});
+
+test('MAC_EXTENDED includes MERCHANT and has no trailing dash', function () {
+    $fields = [
+        'TERMINAL' => 'V1800001', 'TRTYPE' => '1', 'AMOUNT' => '9.00',
+        'CURRENCY' => 'BGN', 'ORDER' => '154744', 'MERCHANT' => '1600000001',
+        'TIMESTAMP' => '20201012124757',
+        'NONCE' => '9EADBD70C0A5AFBAD3DF405902602F79',
+    ];
+    $result = $this->macGeneral->buildRequestSigningData(
+        TransactionType::Purchase, $fields, SigningSchema::MacExtended,
+    );
+    $expected = '8V18000011149.003BGN6154744101600000001' .
+        '1420201012124757329EADBD70C0A5AFBAD3DF405902602F79';
+    expect($result)->toBe($expected)->not->toEndWith('-');
+});
+
+test('MAC_ADVANCED has no trailing dash', function () {
+    $fields = [
+        'TERMINAL' => 'V1800001', 'TRTYPE' => '1', 'AMOUNT' => '9.00',
+        'CURRENCY' => 'BGN', 'ORDER' => '154744',
+        'TIMESTAMP' => '20201012124757',
+        'NONCE' => '9EADBD70C0A5AFBAD3DF405902602F79',
+    ];
+    $result = $this->macGeneral->buildRequestSigningData(
+        TransactionType::Purchase, $fields, SigningSchema::MacAdvanced,
+    );
+    $expected = '8V18000011149.003BGN61547441420201012124757329EADBD70C0A5AFBAD3DF405902602F79';
+    expect($result)->toBe($expected)->not->toEndWith('-');
+});
+
+test('status check ignores signing schema', function () {
+    $fields = [
+        'TERMINAL' => 'V1800001', 'TRTYPE' => '90',
+        'ORDER' => '154744', 'NONCE' => '9EADBD70C0A5AFBAD3DF405902602F79',
+    ];
+    $general = $this->macGeneral->buildRequestSigningData(
+        TransactionType::StatusCheck, $fields, SigningSchema::MacGeneral,
+    );
+    $extended = $this->macGeneral->buildRequestSigningData(
+        TransactionType::StatusCheck, $fields, SigningSchema::MacExtended,
+    );
+    expect($general)->toBe($extended);
 });
