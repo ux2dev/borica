@@ -43,3 +43,24 @@ test('sign throws on wrong passphrase', function () {
 test('verify throws on invalid public key', function () {
     $this->signer->verify('data', str_repeat('A', 512), 'not-a-valid-key');
 })->throws(SigningException::class);
+
+test('verify returns false for short P_SIGN', function () {
+    expect($this->signer->verify('data', 'AABB', $this->publicKey))->toBeFalse();
+});
+
+test('verify returns false for long P_SIGN', function () {
+    expect($this->signer->verify('data', str_repeat('A', 514), $this->publicKey))->toBeFalse();
+});
+
+test('verify handles mixed-case P_SIGN', function () {
+    $data = 'test data';
+    $pSign = $this->signer->sign($data, $this->privateKey);
+    $lowerPSign = strtolower($pSign);
+    expect($this->signer->verify($data, $lowerPSign, $this->publicKey))->toBeTrue();
+});
+
+test('verify returns false for 512-char non-hex string', function () {
+    // 'G' is not a valid hex character, so hex2bin will return false
+    $nonHex = str_repeat('G', 512);
+    expect($this->signer->verify('data', $nonHex, $this->publicKey))->toBeFalse();
+});

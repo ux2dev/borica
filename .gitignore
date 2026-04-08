@@ -3,3 +3,18 @@ composer.lock
 .phpunit.result.cache
 .phpunit.cache/
 .idea/
+.claude/
+
+# Merchant private keys and certificates
+*.key
+*.csr
+*.zip
+MPI_OW_APGW_*/
+V2400297*/
+
+# Borica documentation
+data/
+
+# Local test scripts
+test_pay.php
+test_callback.php

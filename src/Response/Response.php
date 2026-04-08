@@ -7,13 +7,18 @@ namespace Ux2Dev\Borica\Response;
 use Ux2Dev\Borica\ErrorCode\GatewayError;
 use Ux2Dev\Borica\ErrorCode\IssuerError;
 
-final readonly class Response
+final readonly class Response implements \JsonSerializable
 {
     public function __construct(private array $data) {}
 
     public function isSuccessful(): bool
     {
         return $this->getAction() === '0' && $this->getRc() === '00';
+    }
+
+    public function isSoftDecline(): bool
+    {
+        return $this->getAction() === '21' && $this->getRc() === '1A';
     }
 
     public function getAction(): string { return $this->data['ACTION'] ?? ''; }
@@ -35,6 +40,9 @@ final readonly class Response
     public function getStatusMessage(): ?string { return $this->getOptional('STATUSMSG'); }
     public function getAuthStepResult(): ?string { return $this->getOptional('AUTH_STEP_RES'); }
     public function getCardholderInfo(): ?string { return $this->getOptional('CARDHOLDERINFO'); }
+    public function getTranDate(): ?string { return $this->getOptional('TRAN_DATE'); }
+    public function getTranTrtype(): ?string { return $this->getOptional('TRAN_TRTYPE'); }
+    public function getLang(): ?string { return $this->getOptional('LANG'); }
 
     public function getErrorMessage(): string
     {
@@ -42,6 +50,32 @@ final readonly class Response
         if ($rc === '' || $rc === '00') { return ''; }
         if (str_starts_with($rc, '-')) { return GatewayError::getMessage($rc); }
         return IssuerError::getMessage($rc);
+    }
+
+    public function toSafeArray(): array
+    {
+        $safe = $this->data;
+        foreach (['CARD', 'P_SIGN'] as $key) {
+            if (isset($safe[$key])) {
+                $safe[$key] = '[REDACTED]';
+            }
+        }
+        return $safe;
+    }
+
+    public function __debugInfo(): array
+    {
+        return $this->toSafeArray();
+    }
+
+    public function jsonSerialize(): array
+    {
+        return $this->toSafeArray();
+    }
+
+    public function __serialize(): array
+    {
+        return $this->toSafeArray();
     }
 
     private function getOptional(string $key): ?string
