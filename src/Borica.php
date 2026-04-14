@@ -32,6 +32,7 @@ final class Borica
     public function __construct(
         private readonly MerchantConfig $config,
         ?LoggerInterface $logger = null,
+        private readonly ?string $boricaPublicKey = null,
     ) {
         $this->macGeneral = new MacGeneral();
         $this->signer = new Signer();
@@ -307,7 +308,7 @@ final class Borica
         TransactionType $transactionType,
         ?string $publicKey = null,
     ): Response {
-        $key = $publicKey ?? BoricaPublicKeys::getPublicKey($this->config->environment);
+        $key = $publicKey ?? $this->boricaPublicKey ?? BoricaPublicKeys::getPublicKey($this->config->environment);
 
         $parser = new ResponseParser($this->macGeneral, $this->signer, $key);
 
