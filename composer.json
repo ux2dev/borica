@@ -9,7 +9,12 @@
         "psr/log": "^1.0 || ^2.0 || ^3.0"
     },
     "require-dev": {
-        "pestphp/pest": "^4.0"
+        "pestphp/pest": "^4.0",
+        "orchestra/testbench": "^10.0"
+    },
+    "suggest": {
+        "illuminate/support": "^10.0|^11.0|^12.0",
+        "illuminate/events": "^10.0|^11.0|^12.0"
     },
     "autoload": {
         "psr-4": {
@@ -19,6 +24,16 @@
     "autoload-dev": {
         "psr-4": {
             "Ux2Dev\\Borica\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Ux2Dev\\Borica\\Laravel\\BoricaServiceProvider"
+            ],
+            "aliases": {
+                "Borica": "Ux2Dev\\Borica\\Laravel\\Facades\\Borica"
+            }
         }
     },
     "minimum-stability": "stable",

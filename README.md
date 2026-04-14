@@ -276,12 +276,194 @@ try {
 }
 ```
 
+## Laravel Integration
+
+The library includes a Laravel integration layer that works with Laravel 10, 11, 12, and 13. The core library remains framework-agnostic -- the Laravel code lives entirely in `src/Laravel/`.
+
+### Setup
+
+The package auto-discovers via `extra.laravel.providers` in `composer.json`. No manual registration needed.
+
+Publish the config file:
+
+```bash
+php artisan vendor:publish --tag=borica-config
+```
+
+Add your merchant credentials to `.env`:
+
+```env
+BORICA_TERMINAL=V1800001
+BORICA_MERCHANT_ID=1600000001
+BORICA_MERCHANT_NAME="My Shop"
+BORICA_PRIVATE_KEY=/path/to/private.key
+BORICA_ENVIRONMENT=development
+BORICA_CURRENCY=EUR
+```
+
+The `private_key` config accepts either a file path or a raw PEM string.
+
+### Facade
+
+```php
+use Ux2Dev\Borica\Laravel\Facades\Borica;
+
+// Create a payment request using the default merchant
+$request = Borica::createPaymentRequest(
+    amount: '49.99',
+    order: '000001',
+    description: 'Order #000001',
+    mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
+);
+
+$gatewayUrl = Borica::getGatewayUrl();
+$formFields = $request->toArray();
+```
+
+### Multiple Merchants
+
+Define additional merchants in `config/borica.php`:
+
+```php
+'merchants' => [
+    'default' => [ ... ],
+    'second-shop' => [
+        'terminal' => env('BORICA_SECOND_TERMINAL'),
+        'merchant_id' => env('BORICA_SECOND_MERCHANT_ID'),
+        // ...
+    ],
+],
+```
+
+Use a named merchant:
+
+```php
+Borica::merchant('second-shop')->createPaymentRequest(...);
+```
+
+Or pass a runtime config array (e.g. from a database):
+
+```php
+Borica::merchant([
+    'terminal' => $tenant->borica_terminal,
+    'merchant_id' => $tenant->borica_merchant_id,
+    'merchant_name' => $tenant->company_name,
+    'private_key' => $tenant->borica_private_key_path,
+    'environment' => $tenant->borica_environment,
+    'currency' => $tenant->currency,
+])->createPaymentRequest(...);
+```
+
+### Dynamic Terminal Resolution
+
+For multi-tenant applications where merchants are stored in a database, register a custom terminal resolver in a service provider:
+
+```php
+use Ux2Dev\Borica\Laravel\Facades\Borica;
+
+public function boot(): void
+{
+    Borica::resolveTerminalUsing(function (string $terminal): ?array {
+        $tenant = Tenant::where('borica_terminal', $terminal)->first();
+        if (!$tenant) return null;
+
+        return [
+            'name' => $tenant->slug,
+            'terminal' => $tenant->borica_terminal,
+            'merchant_id' => $tenant->borica_merchant_id,
+            'merchant_name' => $tenant->company_name,
+            'private_key' => $tenant->borica_private_key_path,
+            'environment' => $tenant->borica_environment,
+            'currency' => $tenant->currency,
+        ];
+    });
+}
+```
+
+This resolver is used automatically when BORICA sends callbacks -- the middleware looks up the merchant by the `TERMINAL` field in the POST data.
+
+### Callback Handling
+
+The package registers a `POST /borica/callback` route that:
+
+1. Verifies the `P_SIGN` signature via the `VerifyBoricaSignature` middleware
+2. Dispatches events based on the transaction result
+3. Redirects to `config('borica.redirect.success')` or `config('borica.redirect.failure')`
+
+The callback route is automatically excluded from CSRF verification.
+
+#### Events
+
+Listen for these events to process payment results:
+
+| Event | When |
+|---|---|
+| `BoricaResponseReceived` | Every callback, regardless of result |
+| `BoricaPaymentSucceeded` | Purchase (type 1) succeeded |
+| `BoricaPaymentFailed` | Purchase (type 1) failed |
+| `BoricaPreAuthSucceeded` | Pre-auth (type 12) succeeded |
+| `BoricaPreAuthFailed` | Pre-auth (type 12) failed |
+
+```php
+use Ux2Dev\Borica\Laravel\Events\BoricaPaymentSucceeded;
+
+class HandlePayment
+{
+    public function handle(BoricaPaymentSucceeded $event): void
+    {
+        $response = $event->response;
+        $merchantName = $event->merchantName;
+
+        // Mark order as paid
+        Order::where('borica_order', $response->getOrder())
+            ->update(['status' => 'paid', 'rrn' => $response->getRrn()]);
+    }
+}
+```
+
+#### Customizing Routes
+
+Publish the routes file to customize the callback endpoint:
+
+```bash
+php artisan vendor:publish --tag=borica-routes
+```
+
+Or disable the built-in route entirely and define your own:
+
+```php
+// config/borica.php
+'routes' => ['enabled' => false],
+```
+
+### Artisan Commands
+
+#### Generate Certificate
+
+Interactive command to generate an RSA private key and CSR for BORICA merchant registration:
+
+```bash
+php artisan borica:generate-certificate
+php artisan borica:generate-certificate --merchant=default  # pre-fills terminal from config
+```
+
+#### Status Check
+
+Check the status of a transaction:
+
+```bash
+php artisan borica:status-check 000001 --type=purchase
+php artisan borica:status-check 000001 --type=pre-auth --merchant=second-shop
+```
+
+Valid `--type` values: `purchase`, `pre-auth`, `pre-auth-complete`, `pre-auth-reversal`, `reversal`.
+
 ## Security
 
 - Request signing uses **RSA-SHA256** via OpenSSL
 - Response `P_SIGN` is verified against BORICA's public key before any data is returned
 - Private key material is never exposed through `var_dump`, serialization, or public properties
-- Sensitive response fields (CARD, APPROVAL, P_SIGN) are redacted in exception data and serialization
+- Sensitive response fields (CARD, APPROVAL, P_SIGN, RRN, INT_REF, CARDHOLDERINFO) are redacted in exception data and serialization
 - Nonce (128-bit random) and timestamp are auto-generated per request to prevent replay
 - BORICA public keys include integrity fingerprints to detect tampering
 
@@ -302,6 +484,7 @@ vendor/bin/pest
 tests/
   BoricaTest.php                       # Integration tests (full request/response round-trip)
   Config/MerchantConfigTest.php        # Config validation, defaults, serialization guard
+  Certificate/CertificateGeneratorTest.php  # CSR/key generation, validation, file output
   Signing/SignerTest.php               # RSA-SHA256 sign/verify, passphrase, invalid keys
   Signing/MacGeneralTest.php           # MAC field ordering for all transaction types
   Request/PaymentRequestTest.php       # Payment request fields and signing fields
@@ -314,6 +497,17 @@ tests/
   Response/ResponseTest.php            # Response object, success/failure, error messages
   ErrorCode/GatewayErrorTest.php       # Gateway error code lookups
   ErrorCode/IssuerErrorTest.php        # Issuer error code lookups
+  Laravel/
+    TestCase.php                       # Orchestra Testbench base class
+    BoricaServiceProviderTest.php      # Config merging, singleton, routes, commands
+    BoricaManagerTest.php              # Multi-merchant resolution, caching, key resolution
+    FacadeTest.php                     # Facade proxy verification
+    BoricaCallbackControllerTest.php   # Event dispatching, redirects
+    VerifyBoricaSignatureTest.php      # Signature verification, 403 on failure
+    EventsTest.php                     # All 5 event classes
+    ConfigResolutionTest.php           # Config structure validation
+    GenerateCertificateCommandTest.php # Certificate generation command
+    StatusCheckCommandTest.php         # Status check command
   fixtures/
     test_private_key.pem               # Unencrypted RSA 2048-bit key (test only)
     test_private_key_encrypted.pem     # Passphrase-protected key (passphrase: "testpass")

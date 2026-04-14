@@ -17,7 +17,7 @@ final readonly class MerchantConfig
         public string $merchantName,
         private string $privateKey,
         public Environment $environment,
-        public Currency $currency,
+        public Currency $currency = Currency::EUR,
         public SigningSchema $signingSchema = SigningSchema::MacGeneral,
         public string $country = 'BG',
         public string $timezoneOffset = '+03',
