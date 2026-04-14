@@ -121,20 +121,28 @@ test('empty string optional fields return null', function () {
     expect($response->getApproval())->toBeNull();
 });
 
-test('toSafeArray redacts CARD and P_SIGN', function () {
+test('toSafeArray redacts all sensitive fields', function () {
     $response = new Response([
         'ACTION' => '0',
         'RC' => '00',
         'TERMINAL' => 'V1800001',
         'ORDER' => '000001',
         'CARD' => '400000****0002',
+        'APPROVAL' => '123456',
         'P_SIGN' => 'ABCDEF1234',
+        'RRN' => '012345678901',
+        'INT_REF' => 'ABCDEF123456',
+        'CARDHOLDERINFO' => 'John Doe',
     ]);
 
     $safe = $response->toSafeArray();
 
     expect($safe['CARD'])->toBe('[REDACTED]');
+    expect($safe['APPROVAL'])->toBe('[REDACTED]');
     expect($safe['P_SIGN'])->toBe('[REDACTED]');
+    expect($safe['RRN'])->toBe('[REDACTED]');
+    expect($safe['INT_REF'])->toBe('[REDACTED]');
+    expect($safe['CARDHOLDERINFO'])->toBe('[REDACTED]');
     expect($safe['ORDER'])->toBe('000001');
     expect($safe['TERMINAL'])->toBe('V1800001');
 });
