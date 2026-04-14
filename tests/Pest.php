@@ -12,6 +12,7 @@
 */
 
 // uses(Tests\TestCase::class)->in('Feature');
+uses(Ux2Dev\Borica\Tests\Laravel\TestCase::class)->in('Laravel');
 
 /*
 |--------------------------------------------------------------------------

@@ -55,7 +55,7 @@ final readonly class Response implements \JsonSerializable
     public function toSafeArray(): array
     {
         $safe = $this->data;
-        foreach (['CARD', 'P_SIGN'] as $key) {
+        foreach (['CARD', 'APPROVAL', 'P_SIGN', 'RRN', 'INT_REF', 'CARDHOLDERINFO'] as $key) {
             if (isset($safe[$key])) {
                 $safe[$key] = '[REDACTED]';
             }

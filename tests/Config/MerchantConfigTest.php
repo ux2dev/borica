@@ -179,6 +179,18 @@ test('debugInfo shows null passphrase when not set', function () {
     expect($debug['privateKeyPassphrase'])->toBeNull();
 });
 
+test('defaults to EUR currency when not specified', function () {
+    $config = new MerchantConfig(
+        terminal: '12345678',
+        merchantId: 'MERCHANT01',
+        merchantName: 'Test Shop',
+        privateKey: $this->privateKey,
+        environment: Environment::Development,
+    );
+
+    expect($config->currency)->toBe(Currency::EUR);
+});
+
 test('custom country and timezone override defaults', function () {
     $config = new MerchantConfig(
         terminal: '12345678',
