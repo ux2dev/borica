@@ -48,7 +48,7 @@ class VerifyBoricaSignature
 
         try {
             $borica = $this->manager->merchant($merchantName);
-            $response = $borica->parseResponse($data, $transactionType);
+            $response = $borica->responses()->parse($data, $transactionType);
         } catch (BoricaException $e) {
             $this->logger->warning('BORICA signature verification failed', [
                 'terminal' => $terminal,

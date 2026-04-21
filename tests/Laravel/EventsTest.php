@@ -7,7 +7,7 @@ use Ux2Dev\Borica\Laravel\Events\BoricaPaymentSucceeded;
 use Ux2Dev\Borica\Laravel\Events\BoricaPreAuthFailed;
 use Ux2Dev\Borica\Laravel\Events\BoricaPreAuthSucceeded;
 use Ux2Dev\Borica\Laravel\Events\BoricaResponseReceived;
-use Ux2Dev\Borica\Response\Response;
+use Ux2Dev\Borica\Cgi\Response\Response;
 
 test('BoricaResponseReceived holds response and terminal', function () {
     $response = new Response([

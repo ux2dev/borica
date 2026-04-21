@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Ux2Dev\Borica\Laravel\Events;
 
 use Illuminate\Foundation\Events\Dispatchable;
-use Ux2Dev\Borica\Response\Response;
+use Ux2Dev\Borica\Cgi\Response\Response;
 
 class BoricaPaymentSucceeded
 {

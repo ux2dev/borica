@@ -69,7 +69,7 @@ class GenerateCertificateCommand extends Command
         $merchant = $this->option('merchant');
 
         if ($merchant !== null) {
-            $terminal = config("borica.merchants.{$merchant}.terminal");
+            $terminal = config("borica.cgi.merchants.{$merchant}.terminal");
 
             if ($terminal === null) {
                 $this->error("Merchant [{$merchant}] is not configured.");

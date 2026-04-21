@@ -48,7 +48,7 @@ class StatusCheckCommand extends Command
         $order = $this->argument('order');
 
         try {
-            $request = $borica->createStatusCheckRequest(
+            $request = $borica->status()->check(
                 order: $order,
                 transactionType: $transactionType,
             );
@@ -71,7 +71,7 @@ class StatusCheckCommand extends Command
         parse_str($httpResponse->body(), $responseData);
 
         try {
-            $response = $borica->parseResponse($responseData, $transactionType);
+            $response = $borica->responses()->parse($responseData, $transactionType);
         } catch (BoricaException $e) {
             $this->error("Parse error: {$e->getMessage()}");
             return self::FAILURE;
@@ -82,7 +82,7 @@ class StatusCheckCommand extends Command
         return self::SUCCESS;
     }
 
-    private function displayResponse(\Ux2Dev\Borica\Response\Response $response): void
+    private function displayResponse(\Ux2Dev\Borica\Cgi\Response\Response $response): void
     {
         $status = $response->isSuccessful() ? 'SUCCESS' : 'FAILED';
         $action = $response->getAction();

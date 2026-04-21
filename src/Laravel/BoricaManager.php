@@ -6,19 +6,24 @@ namespace Ux2Dev\Borica\Laravel;
 
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use InvalidArgumentException;
-use Ux2Dev\Borica\Borica;
+use Ux2Dev\Borica\Cgi\CgiClient;
 use Ux2Dev\Borica\Config\MerchantConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
+use Ux2Dev\Borica\InfopayCheckout\CheckoutClient;
+use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
 
 class BoricaManager
 {
-    /** @var array<string, Borica> */
+    /** @var array<string, CgiClient> */
     private array $merchants = [];
+
+    /** @var array<string, CheckoutClient> */
+    private array $checkoutClients = [];
 
     private ?\Closure $terminalResolver = null;
 
-    /** @var array<string, array> Configs resolved via custom terminal resolver, pending merchant() call. */
+    /** @var array<string, array> */
     private array $resolvedConfigs = [];
 
     public function __construct(
@@ -26,27 +31,6 @@ class BoricaManager
     ) {}
 
     /**
-     * Register a custom resolver for terminal-based merchant lookup.
-     *
-     * The callback receives a terminal ID and should return a merchant
-     * config array (same shape as borica.merchants.* entries) or null.
-     * Include a 'name' key to control the merchant identifier used in events.
-     *
-     * Example (multi-tenant):
-     *   $manager->resolveTerminalUsing(function (string $terminal): ?array {
-     *       $tenant = Tenant::where('borica_terminal', $terminal)->first();
-     *       if (!$tenant) return null;
-     *       return [
-     *           'name' => $tenant->slug,
-     *           'terminal' => $tenant->borica_terminal,
-     *           'merchant_id' => $tenant->borica_merchant_id,
-     *           'merchant_name' => $tenant->company_name,
-     *           'private_key' => $tenant->borica_private_key_path,
-     *           'environment' => $tenant->borica_environment,
-     *           'currency' => $tenant->currency,
-     *       ];
-     *   });
-     *
      * @param callable(string): ?array $resolver
      */
     public function resolveTerminalUsing(callable $resolver): void
@@ -55,64 +39,54 @@ class BoricaManager
     }
 
     /**
-     * Resolve a Borica instance by merchant name or runtime array config.
-     *
-     * Named merchants are cached; array configs create a new instance each time.
+     * Resolve a CgiClient by merchant name or runtime config array.
      */
-    public function merchant(string|array|null $name = null): Borica
+    public function cgi(string|array|null $name = null): CgiClient
     {
         if (is_array($name)) {
-            return $this->buildMerchant($name);
+            return $this->buildCgi($name);
         }
 
-        $name = $name ?? $this->config->get('borica.default', 'default');
+        $name = $name ?? $this->config->get('borica.cgi.default', 'default');
 
         if (isset($this->merchants[$name])) {
             return $this->merchants[$name];
         }
 
-        // Check configs resolved by the custom terminal resolver
         if (isset($this->resolvedConfigs[$name])) {
-            $this->merchants[$name] = $this->buildMerchant($this->resolvedConfigs[$name]);
+            $this->merchants[$name] = $this->buildCgi($this->resolvedConfigs[$name]);
             unset($this->resolvedConfigs[$name]);
-
             return $this->merchants[$name];
         }
 
-        $merchantConfig = $this->config->get("borica.merchants.{$name}");
+        $merchantConfig = $this->config->get("borica.cgi.merchants.{$name}");
 
         if ($merchantConfig === null) {
-            throw new InvalidArgumentException("Borica merchant [{$name}] is not configured");
+            throw new InvalidArgumentException("Borica CGI merchant [{$name}] is not configured");
         }
 
-        $this->merchants[$name] = $this->buildMerchant($merchantConfig);
+        $this->merchants[$name] = $this->buildCgi($merchantConfig);
 
         return $this->merchants[$name];
     }
 
     /**
-     * Find a resolved Borica instance by terminal ID across all configured merchants.
+     * Back-compat alias. Prefer cgi().
      */
-    public function merchantByTerminal(string $terminal): ?Borica
+    public function merchant(string|array|null $name = null): CgiClient
     {
-        $name = $this->findMerchantNameByTerminal($terminal);
-
-        if ($name === null) {
-            return null;
-        }
-
-        return $this->merchant($name);
+        return $this->cgi($name);
     }
 
-    /**
-     * Find the merchant config name that matches the given terminal ID.
-     *
-     * Checks static config first, then falls back to the custom terminal
-     * resolver registered via resolveTerminalUsing().
-     */
+    public function merchantByTerminal(string $terminal): ?CgiClient
+    {
+        $name = $this->findMerchantNameByTerminal($terminal);
+        return $name === null ? null : $this->cgi($name);
+    }
+
     public function findMerchantNameByTerminal(string $terminal): ?string
     {
-        $merchants = $this->config->get('borica.merchants', []);
+        $merchants = $this->config->get('borica.cgi.merchants', []);
 
         foreach ($merchants as $name => $merchantConfig) {
             if (($merchantConfig['terminal'] ?? null) === $terminal) {
@@ -122,11 +96,9 @@ class BoricaManager
 
         if ($this->terminalResolver) {
             $config = ($this->terminalResolver)($terminal);
-
             if ($config !== null) {
                 $name = $config['name'] ?? $terminal;
                 $this->resolvedConfigs[$name] = $config;
-
                 return $name;
             }
         }
@@ -134,23 +106,77 @@ class BoricaManager
         return null;
     }
 
-    /**
-     * Get the gateway URL from the default merchant.
-     */
     public function getGatewayUrl(): string
     {
-        return $this->merchant()->getGatewayUrl();
+        return $this->cgi()->getGatewayUrl();
     }
 
     /**
-     * Proxy all method calls to the default merchant.
+     * Proxy calls to the default CgiClient for ergonomic chaining
+     * like BoricaManager::payments()->purchase(...).
      */
     public function __call(string $method, array $parameters): mixed
     {
-        return $this->merchant()->{$method}(...$parameters);
+        return $this->cgi()->{$method}(...$parameters);
     }
 
-    private function buildMerchant(array $config): Borica
+    /**
+     * Resolve a CheckoutClient by merchant name or runtime config array.
+     */
+    public function checkout(string|array|null $name = null): CheckoutClient
+    {
+        if (is_array($name)) {
+            return $this->buildCheckout($name);
+        }
+
+        $name = $name ?? $this->config->get('borica.checkout.default', 'default');
+
+        if (isset($this->checkoutClients[$name])) {
+            return $this->checkoutClients[$name];
+        }
+
+        $merchantConfig = $this->config->get("borica.checkout.merchants.{$name}");
+
+        if ($merchantConfig === null) {
+            throw new InvalidArgumentException("Borica Checkout merchant [{$name}] is not configured");
+        }
+
+        $this->checkoutClients[$name] = $this->buildCheckout($merchantConfig);
+
+        return $this->checkoutClients[$name];
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function buildCheckout(array $config): CheckoutClient
+    {
+        $privateKey = $this->resolveKey($config['private_key'] ?? '') ?? '';
+
+        $certificate = '';
+        if (!empty($config['certificate'])) {
+            $certificate = $this->resolveKey($config['certificate']) ?? '';
+        }
+
+        $checkoutConfig = new CheckoutConfig(
+            baseUrl: $config['base_url'] ?? '',
+            authId: $config['auth_id'] ?? '',
+            authSecret: $config['auth_secret'] ?? '',
+            shopId: $config['shop_id'] ?? '',
+            privateKey: $privateKey,
+            certificate: $certificate,
+            privateKeyPassphrase: $config['private_key_passphrase'] ?? null,
+        );
+
+        return new CheckoutClient(
+            config: $checkoutConfig,
+            httpClient: app(\Psr\Http\Client\ClientInterface::class),
+            requestFactory: app(\Psr\Http\Message\RequestFactoryInterface::class),
+            streamFactory: app(\Psr\Http\Message\StreamFactoryInterface::class),
+        );
+    }
+
+    private function buildCgi(array $config): CgiClient
     {
         $privateKey = $this->resolveKey($config['private_key'] ?? '') ?? '';
         $boricaPublicKey = $this->resolveKey($config['borica_public_key'] ?? null);
@@ -170,7 +196,7 @@ class BoricaManager
             privateKeyPassphrase: $config['private_key_passphrase'] ?? null,
         );
 
-        return new Borica(
+        return new CgiClient(
             config: $merchantConfig,
             boricaPublicKey: $boricaPublicKey,
         );

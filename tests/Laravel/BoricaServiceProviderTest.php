@@ -9,7 +9,7 @@ use Ux2Dev\Borica\Laravel\BoricaServiceProvider;
 
 test('config is merged', function () {
     expect(config('borica'))->toBeArray();
-    expect(config('borica.default'))->toBe('default');
+    expect(config('borica.cgi.default'))->toBe('default');
 });
 
 test('BoricaManager is registered as singleton', function () {
