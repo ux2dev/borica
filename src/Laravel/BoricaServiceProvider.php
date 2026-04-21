@@ -16,6 +16,14 @@ class BoricaServiceProvider extends ServiceProvider
         $this->app->singleton(BoricaManager::class, function ($app) {
             return new BoricaManager($app['config']);
         });
+
+        if (class_exists(\GuzzleHttp\Client::class)) {
+            $this->app->bindIf(\Psr\Http\Client\ClientInterface::class, fn () => new \GuzzleHttp\Client());
+        }
+        if (class_exists(\GuzzleHttp\Psr7\HttpFactory::class)) {
+            $this->app->bindIf(\Psr\Http\Message\RequestFactoryInterface::class, fn () => new \GuzzleHttp\Psr7\HttpFactory());
+            $this->app->bindIf(\Psr\Http\Message\StreamFactoryInterface::class, fn () => new \GuzzleHttp\Psr7\HttpFactory());
+        }
     }
 
     public function boot(): void
@@ -33,6 +41,8 @@ class BoricaServiceProvider extends ServiceProvider
             $this->commands([
                 Console\GenerateCertificateCommand::class,
                 Console\StatusCheckCommand::class,
+                Console\ImportCertificateCommand::class,
+                Console\CheckCertificatesCommand::class,
             ]);
         }
 

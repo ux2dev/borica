@@ -3,12 +3,12 @@
 declare(strict_types=1);
 
 test('config has default merchant key', function () {
-    expect(config('borica.default'))->toBe('default');
+    expect(config('borica.cgi.default'))->toBe('default');
 });
 
 test('config has merchants array', function () {
-    expect(config('borica.merchants.default'))->toBeArray();
-    expect(config('borica.merchants.default.terminal'))->toBe('V1800001');
+    expect(config('borica.cgi.merchants.default'))->toBeArray();
+    expect(config('borica.cgi.merchants.default.terminal'))->toBe('V1800001');
 });
 
 test('config has routes section', function () {

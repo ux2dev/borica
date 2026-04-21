@@ -8,7 +8,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 use Ux2Dev\Borica\Enum\TransactionType;
 use Ux2Dev\Borica\Laravel\Events\BoricaResponseReceived;
 use Ux2Dev\Borica\Laravel\Http\Middleware\VerifyBoricaSignature;
-use Ux2Dev\Borica\Response\Response as BoricaResponse;
+use Ux2Dev\Borica\Cgi\Response\Response as BoricaResponse;
 
 test('valid signature attaches Response to request', function () {
     $data = $this->buildSignedCallbackData();

@@ -26,8 +26,8 @@ abstract class TestCase extends BaseTestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:' . base64_encode(random_bytes(32)));
-        $app['config']->set('borica.default', 'default');
-        $app['config']->set('borica.merchants.default', [
+        $app['config']->set('borica.cgi.default', 'default');
+        $app['config']->set('borica.cgi.merchants.default', [
             'terminal' => 'V1800001',
             'merchant_id' => 'MERCHANT01',
             'merchant_name' => 'Test Shop',

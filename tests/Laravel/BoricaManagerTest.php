@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-use Ux2Dev\Borica\Borica;
+use Ux2Dev\Borica\Cgi\CgiClient;
 use Ux2Dev\Borica\Laravel\BoricaManager;
-use Ux2Dev\Borica\Request\PaymentRequest;
+use Ux2Dev\Borica\Cgi\Request\PaymentRequest;
 
 test('resolves default merchant', function () {
     $manager = app(BoricaManager::class);
 
     $borica = $manager->merchant('default');
 
-    expect($borica)->toBeInstanceOf(Borica::class);
+    expect($borica)->toBeInstanceOf(CgiClient::class);
 });
 
 test('caches resolved merchants by name', function () {
@@ -39,7 +39,7 @@ test('resolves merchant from runtime array config', function () {
         'timezone_offset' => '+03',
     ]);
 
-    expect($borica)->toBeInstanceOf(Borica::class);
+    expect($borica)->toBeInstanceOf(CgiClient::class);
 });
 
 test('runtime array merchants are not cached', function () {
@@ -72,10 +72,10 @@ test('proxies methods to default merchant', function () {
     expect($url)->toBe('https://3dsgate-dev.borica.bg/cgi-bin/cgi_link');
 });
 
-test('proxies createPaymentRequest to default merchant', function () {
+test('proxies payments() resource to default merchant', function () {
     $manager = app(BoricaManager::class);
 
-    $request = $manager->createPaymentRequest(
+    $request = $manager->payments()->purchase(
         amount: '10.50',
         order: '000001',
         description: 'Test payment',
@@ -90,7 +90,7 @@ test('proxies createPaymentRequest to default merchant', function () {
 });
 
 test('resolves private key from file path', function () {
-    config()->set('borica.merchants.file-based', [
+    config()->set('borica.cgi.merchants.file-based', [
         'terminal' => 'V1800001',
         'merchant_id' => 'MERCHANT01',
         'merchant_name' => 'File Shop',
@@ -106,11 +106,11 @@ test('resolves private key from file path', function () {
     $manager = app(BoricaManager::class);
     $borica = $manager->merchant('file-based');
 
-    expect($borica)->toBeInstanceOf(Borica::class);
+    expect($borica)->toBeInstanceOf(CgiClient::class);
 });
 
 test('resolves private key from raw PEM string', function () {
-    config()->set('borica.merchants.pem-based', [
+    config()->set('borica.cgi.merchants.pem-based', [
         'terminal' => 'V1800001',
         'merchant_id' => 'MERCHANT01',
         'merchant_name' => 'PEM Shop',
@@ -126,21 +126,21 @@ test('resolves private key from raw PEM string', function () {
     $manager = app(BoricaManager::class);
     $borica = $manager->merchant('pem-based');
 
-    expect($borica)->toBeInstanceOf(Borica::class);
+    expect($borica)->toBeInstanceOf(CgiClient::class);
 });
 
 test('throws exception for unknown merchant name', function () {
     $manager = app(BoricaManager::class);
 
     $manager->merchant('nonexistent');
-})->throws(InvalidArgumentException::class, 'Borica merchant [nonexistent] is not configured');
+})->throws(InvalidArgumentException::class, 'Borica CGI merchant [nonexistent] is not configured');
 
 test('resolves merchant by terminal ID', function () {
     $manager = app(BoricaManager::class);
 
     $borica = $manager->merchantByTerminal('V1800001');
 
-    expect($borica)->toBeInstanceOf(Borica::class);
+    expect($borica)->toBeInstanceOf(CgiClient::class);
 });
 
 test('merchantByTerminal returns null for unknown terminal', function () {
@@ -180,7 +180,7 @@ test('resolveTerminalUsing resolves merchant from custom callback', function () 
 
     $borica = $manager->merchantByTerminal('DBTERMN1');
 
-    expect($borica)->toBeInstanceOf(Borica::class);
+    expect($borica)->toBeInstanceOf(CgiClient::class);
     expect($borica->getGatewayUrl())->toBe('https://3dsgate-dev.borica.bg/cgi-bin/cgi_link');
 });
 
