@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Enum;
 
-enum PaymentStatus: string
+enum PaymentStatusCode: string
 {
     case New = 'New';
     case WaitingForProcessing = 'WaitingForProcessing';
