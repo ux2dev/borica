@@ -416,6 +416,157 @@ The package depends on `psr/http-client` and `psr/http-factory` interfaces only.
 
 `POST /v1/api/paymentRequests` requires an `X-JWS-Signature` header over the request body. The library signs the JSON body with the configured private key using RS256 detached JWS (RFC 7515 + RFC 7797's `b64=false` header). BORICA issues a separate keypair for the Checkout service - do not reuse the CGI signing key.
 
+## Infopay ERP Integration
+
+BORICA's [Infopay ERP Integration API](https://integration.infopay.bg/index.html) is a separate REST service for ERP-side workflows — listing accounts and balances, fetching booked transactions, initiating SEPA credit transfers (single and bulk), and issuing invoices. It is unrelated to the Checkout service: no JWS signing, no certificates — just plain JSON with session-based auth.
+
+The merchant receives a `uniqueId` + `accessToken` pair as part of the ERP registration; these are exchanged for a session (`SessionId` + `SessionKey`) sent as headers on every subsequent call.
+
+### Standalone usage
+
+```php
+use DateTimeImmutable;
+use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\HttpFactory;
+use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
+use Ux2Dev\Borica\InfopayErp\Dto\AccountReference;
+use Ux2Dev\Borica\InfopayErp\Dto\AddressReference;
+use Ux2Dev\Borica\InfopayErp\Dto\AmountRequest;
+use Ux2Dev\Borica\InfopayErp\Dto\SepaPayment;
+use Ux2Dev\Borica\InfopayErp\Dto\SingleSepaPaymentRequest;
+use Ux2Dev\Borica\InfopayErp\Enum\Currency;
+use Ux2Dev\Borica\InfopayErp\Enum\SepaServiceLevel;
+use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
+use Ux2Dev\Borica\InfopayErp\ErpClient;
+
+$config = new ErpConfig(
+    baseUrl: 'https://integration.infopay.bg',
+    uniqueId: 'a78941c2-3fab-428f-b614-1422b42a0e46',
+    accessToken: 'B74xFSWZOEOAxHr8CYjE-u2AUDoWjuF5P6ygqNck7koxu493HovTuh2qxx20z4pG',
+);
+
+$factory = new HttpFactory();
+$client = new ErpClient(
+    config: $config,
+    httpClient: new Client(),
+    requestFactory: $factory,
+    streamFactory: $factory,
+);
+
+// 1. Create a session — the credentials come from $config
+$session = $client->sessions()->create();
+if ($session->status !== SessionCreateStatus::Success) {
+    throw new RuntimeException("Auth failed: {$session->status->value}");
+}
+
+// 2. List accounts (with balances)
+$accounts = $client->accounts()->list($session, withBalance: true);
+foreach ($accounts->accounts as $account) {
+    echo "{$account->iban}  {$account->currency}\n";
+}
+
+// 3. Trigger sync and wait for it to complete (exponential backoff, capped at 60s)
+$syncState = $client->synchronizations()->waitForSync(
+    session: $session,
+    accountIds: ['acc-uuid-1'],
+    timeoutSeconds: 60,
+);
+
+// 4. Iterate over every booked transaction in a date range — paginator follows
+//    the HATEOAS Links.Next.href chain automatically.
+foreach ($client->transactions()->iterate(
+    session: $session,
+    accountId: 'acc-uuid-1',
+    dateFrom: new DateTimeImmutable('2026-01-01'),
+    dateTo: new DateTimeImmutable('2026-01-31'),
+) as $tx) {
+    echo "{$tx->bookingDate?->format('Y-m-d')}  {$tx->transactionAmount->amount}\n";
+}
+
+// 5. Initiate a single SEPA credit transfer
+$payment = $client->payments()->createSepa($session, new SingleSepaPaymentRequest(
+    debtorAccount: new AccountReference('BG80BNBG96611020345678'),
+    payment: new SepaPayment(
+        creditorName: 'Acme GmbH',
+        creditorAccount: new AccountReference('DE89370400440532013000'),
+        creditorAddress: new AddressReference(country: 'DE', city: 'Berlin'),
+        instructedAmount: new AmountRequest('150.00', Currency::Eur),
+        remittanceInformationUnstructured: 'Invoice 2026-001',
+        serviceLevel: SepaServiceLevel::Inst,
+    ),
+));
+
+// 6. The bank may require SCA confirmation in a browser
+header('Location: ' . $payment->links?->scaRedirect);
+
+// 7. Close the session when done
+$client->sessions()->close($session);
+```
+
+### Laravel usage
+
+After adding the `erp` config block (see Configuration), use the facade:
+
+```php
+use Ux2Dev\Borica\Laravel\Facades\Borica;
+
+$erp = Borica::erp();
+$session = $erp->sessions()->create();
+$accounts = $erp->accounts()->list($session, withBalance: true);
+```
+
+### Session lifecycle is the caller's responsibility
+
+Sessions are stateful and finite: BORICA expires them after a period of inactivity, and any authenticated call against an expired session returns `HTTP 401`. The library is intentionally stateless on this point — it does **not** auto-refresh sessions or retry on 401. That belongs in the integration layer, where you can decide whether to re-auth, surface the failure, or queue a retry.
+
+For Laravel projects the recommended pattern is a thin wrapper around `Borica::erp()` that:
+
+- Caches the active `Session` (e.g. in the cache/session store, keyed by integration name).
+- Catches `Ux2Dev\Borica\Exception\AuthenticationException` from any resource call, calls `sessions()->create()` to mint a new session, and retries the original call once.
+- Periodically calls `sessions()->check()` to validate before long batch jobs.
+
+This will be added as opt-in middleware in a future release.
+
+### Available resources
+
+| Resource | Methods | Purpose |
+|---|---|---|
+| `sessions()` | `create()`, `check()`, `close()` | Session lifecycle |
+| `synchronizations()` | `refresh()`, `currentState()`, `waitForSync()` | Trigger and poll for balance/transaction sync |
+| `accounts()` | `list()`, `get()` | Inspect linked bank accounts |
+| `transactions()` | `list()`, `iterate()`, `missingDates()` | Paginated transaction history + sync gap detection |
+| `payments()` | `createSepa()`, `getStatus()` | Single SEPA credit transfer |
+| `bulkPayments()` | `createSepa()`, `getStatus()` | Batch SEPA credit transfer (2..250 payments) |
+| `invoices()` | `create()` | Issue an invoice with polymorphic content (with/without VAT) and payment method |
+
+The library covers SEPA payment paths only — domestic BGN credit/budget transfers from the spec are intentionally out of scope. Open an issue if you need them.
+
+### Pagination
+
+`transactions()->list()` returns one page (`TransactionsPage`) with the booked transactions and an optional `nextUrl()`. For convenience, `transactions()->iterate()` returns a `Generator<Transaction>` that follows the `Links.Next.href` chain transparently and resolves relative URLs against the configured base URL.
+
+### Sync polling
+
+ERP sync is asynchronous: `POST /api/synchronizations/.../refresh` returns 204 immediately, and you must poll `GET /api/synchronizations/.../currentState` until every account leaves the `Processing` state. `waitForSync()` wraps both calls with exponential backoff and a configurable timeout — it throws `RuntimeException` if the sync hasn't finished by the deadline.
+
+### Polymorphic invoice payloads
+
+Three areas of the invoice schema use OpenAPI `oneOf` discriminators. Each is modeled as an abstract base + concrete subclasses:
+
+- `Content` → `ContentWithVat` / `ContentWithoutVat` (discriminator `contentType`)
+- `PaymentMethod` → `BankTransfer` / `CashPaymentMethod` / `CardPaymentMethod` / `OtherPaymentMethod` (discriminator `paymentType`)
+- `VatRate` → `ZeroVat` / `NonZeroVat` (discriminator `vatRateType`)
+
+Pick the concrete subclass when constructing an `InvoiceCreateRequest`; the discriminator field is set automatically during serialization.
+
+### Spec quirks preserved on the wire
+
+A handful of property names in the ERP spec contain typos. The library uses the correct spelling at the PHP boundary but preserves the exact wire form so requests round-trip cleanly:
+
+- `DebitorAccount` (should be `Debtor`) — used in payment requests; PHP property is `debtorAccount`.
+- `TransactioneCurrentState` (extra `e`) — used in `BalancesAndTransactionsCurrentStateResponse`; PHP property is `transactionCurrentState`.
+- `InvaliCredentials` (missing `d`) — `SessionCreateStatus` enum case for failed auth.
+
 ## Laravel Integration
 
 The library includes a Laravel integration layer that works with Laravel 10, 11, 12, and 13. The core library remains framework-agnostic -- the Laravel code lives entirely in `src/Laravel/`.
@@ -472,6 +623,17 @@ return [
                 'shop_id'                => env('BORICA_CHECKOUT_SHOP_ID'),
                 'private_key'            => env('BORICA_CHECKOUT_PRIVATE_KEY'),
                 'private_key_passphrase' => env('BORICA_CHECKOUT_PRIVATE_KEY_PASSPHRASE'),
+            ],
+        ],
+    ],
+
+    'erp' => [
+        'default' => env('BORICA_ERP_INTEGRATION', 'default'),
+        'integrations' => [
+            'default' => [
+                'base_url'     => env('BORICA_ERP_BASE_URL'),
+                'unique_id'    => env('BORICA_ERP_UNIQUE_ID'),
+                'access_token' => env('BORICA_ERP_ACCESS_TOKEN'),
             ],
         ],
     ],
