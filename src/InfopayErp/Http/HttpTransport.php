@@ -62,7 +62,22 @@ final class HttpTransport
             return [];
         }
 
-        $decoded = $raw === '' ? [] : $this->decode($raw, $status);
+        // For non-2xx responses we tolerate non-JSON bodies (e.g. an Azure
+        // Application Gateway 504 page) — surface the HTTP status as the
+        // primary signal and stuff the raw body verbatim into the exception.
+        $isError = $status === 401 || $status < 200 || $status >= 300;
+
+        $decoded = [];
+        $decodeError = null;
+        if ($raw !== '') {
+            try {
+                $maybe = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+                $decoded = is_array($maybe) ? $maybe : ['_raw' => $raw];
+            } catch (\JsonException $e) {
+                $decodeError = $e;
+                $decoded = ['_raw' => $raw];
+            }
+        }
 
         if ($status === 401) {
             throw new AuthenticationException(
@@ -72,11 +87,20 @@ final class HttpTransport
             );
         }
 
-        if ($status < 200 || $status >= 300) {
+        if ($isError) {
             throw new ApiException(
                 message: "ERP API returned HTTP {$status}",
                 httpStatus: $status,
                 body: $decoded,
+            );
+        }
+
+        if ($decodeError !== null) {
+            throw new InvalidResponseException(
+                "Malformed JSON response (HTTP {$status}): " . $decodeError->getMessage(),
+                $decoded,
+                0,
+                $decodeError,
             );
         }
 
@@ -93,24 +117,4 @@ final class HttpTransport
         }
     }
 
-    /** @return array<string, mixed> */
-    private function decode(string $raw, int $status): array
-    {
-        try {
-            $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            throw new InvalidResponseException(
-                "Malformed JSON response (HTTP {$status}): " . $e->getMessage(),
-                [],
-                0,
-                $e,
-            );
-        }
-
-        if (!is_array($decoded)) {
-            throw new InvalidResponseException('Expected JSON object, got ' . gettype($decoded));
-        }
-
-        return $decoded;
-    }
 }
