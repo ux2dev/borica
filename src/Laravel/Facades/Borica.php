@@ -11,6 +11,7 @@ use Ux2Dev\Borica\Laravel\BoricaManager;
  * @method static void resolveTerminalUsing(callable $resolver)
  * @method static \Ux2Dev\Borica\Cgi\CgiClient cgi(string|array|null $name = null)
  * @method static \Ux2Dev\Borica\InfopayCheckout\CheckoutClient checkout(string|array|null $name = null)
+ * @method static \Ux2Dev\Borica\InfopayErp\ErpClient erp(string|array|null $name = null)
  * @method static \Ux2Dev\Borica\Cgi\CgiClient merchant(string|array|null $name = null)
  * @method static \Ux2Dev\Borica\Cgi\CgiClient|null merchantByTerminal(string $terminal)
  * @method static string|null findMerchantNameByTerminal(string $terminal)

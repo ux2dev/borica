@@ -39,6 +39,18 @@ return [
         ],
     ],
 
+    'erp' => [
+        'default' => env('BORICA_ERP_INTEGRATION', 'default'),
+
+        'integrations' => [
+            'default' => [
+                'base_url' => env('BORICA_ERP_BASE_URL'),
+                'unique_id' => env('BORICA_ERP_UNIQUE_ID'),
+                'access_token' => env('BORICA_ERP_ACCESS_TOKEN'),
+            ],
+        ],
+    ],
+
     'routes' => [
         'enabled' => true,
         'prefix' => 'borica',
