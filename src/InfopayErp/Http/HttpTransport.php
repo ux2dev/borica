@@ -87,7 +87,7 @@ final class HttpTransport
     private function encode(array $body): string
     {
         try {
-            return json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            return json_encode($body, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION);
         } catch (\JsonException $e) {
             throw new InvalidResponseException('Failed to encode request body: ' . $e->getMessage(), [], 0, $e);
         }
