@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Resource;
 
+use RuntimeException;
 use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
 use Ux2Dev\Borica\InfopayErp\Dto\AccountSyncStateCollection;
 use Ux2Dev\Borica\InfopayErp\Dto\Session;
@@ -56,5 +57,47 @@ final class SynchronizationsResource
         );
 
         return AccountSyncStateCollection::fromArray($response);
+    }
+
+    /**
+     * Convenience: fire a refresh and poll `currentState` until no account
+     * is still Processing. Returns the final state. Throws on timeout.
+     *
+     * Exponential backoff caps at $maxBackoffMs; total wait is bounded by
+     * $timeoutSeconds.
+     *
+     * @param array<int, string> $accountIds
+     */
+    public function waitForSync(
+        Session $session,
+        array $accountIds = [],
+        int $timeoutSeconds = 60,
+        int $initialBackoffMs = 250,
+        float $backoffMultiplier = 1.5,
+        int $maxBackoffMs = 5000,
+    ): AccountSyncStateCollection {
+        $this->refresh($session, $accountIds);
+
+        $deadline = microtime(true) + $timeoutSeconds;
+        $delayMs = $initialBackoffMs;
+
+        while (true) {
+            usleep($delayMs * 1000);
+
+            $state = $this->currentState($session, $accountIds);
+
+            if (!$state->anyProcessing()) {
+                return $state;
+            }
+
+            if (microtime(true) >= $deadline) {
+                throw new RuntimeException(sprintf(
+                    'Sync did not complete within %d seconds; last state still Processing',
+                    $timeoutSeconds,
+                ));
+            }
+
+            $delayMs = (int) min($maxBackoffMs, $delayMs * $backoffMultiplier);
+        }
     }
 }
