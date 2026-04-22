@@ -2,6 +2,8 @@
 
 PHP library for the BORICA eCommerce CGI payment gateway. Handles request signing, response verification, and all six transaction types defined by the BORICA protocol.
 
+Sponsored by [ux2.dev](https://ux2.dev).
+
 ## Requirements
 
 - PHP 8.1 or higher
@@ -886,6 +888,10 @@ $response = $cgi->responses()->parse(
     $testPublicKey,  // override the BORICA public key for testing
 );
 ```
+
+## Sponsor
+
+Built and maintained by [ux2.dev](https://ux2.dev).
 
 ## License
 
