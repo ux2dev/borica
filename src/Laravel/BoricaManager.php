@@ -12,6 +12,8 @@ use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\InfopayCheckout\CheckoutClient;
 use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
+use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
+use Ux2Dev\Borica\InfopayErp\ErpClient;
 
 class BoricaManager
 {
@@ -20,6 +22,9 @@ class BoricaManager
 
     /** @var array<string, CheckoutClient> */
     private array $checkoutClients = [];
+
+    /** @var array<string, ErpClient> */
+    private array $erpClients = [];
 
     private ?\Closure $terminalResolver = null;
 
@@ -170,6 +175,51 @@ class BoricaManager
 
         return new CheckoutClient(
             config: $checkoutConfig,
+            httpClient: app(\Psr\Http\Client\ClientInterface::class),
+            requestFactory: app(\Psr\Http\Message\RequestFactoryInterface::class),
+            streamFactory: app(\Psr\Http\Message\StreamFactoryInterface::class),
+        );
+    }
+
+    /**
+     * Resolve an ErpClient by integration name or runtime config array.
+     */
+    public function erp(string|array|null $name = null): ErpClient
+    {
+        if (is_array($name)) {
+            return $this->buildErp($name);
+        }
+
+        $name = $name ?? $this->config->get('borica.erp.default', 'default');
+
+        if (isset($this->erpClients[$name])) {
+            return $this->erpClients[$name];
+        }
+
+        $integrationConfig = $this->config->get("borica.erp.integrations.{$name}");
+
+        if ($integrationConfig === null) {
+            throw new InvalidArgumentException("Borica ERP integration [{$name}] is not configured");
+        }
+
+        $this->erpClients[$name] = $this->buildErp($integrationConfig);
+
+        return $this->erpClients[$name];
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function buildErp(array $config): ErpClient
+    {
+        $erpConfig = new ErpConfig(
+            baseUrl: $config['base_url'] ?? '',
+            uniqueId: $config['unique_id'] ?? '',
+            accessToken: $config['access_token'] ?? '',
+        );
+
+        return new ErpClient(
+            config: $erpConfig,
             httpClient: app(\Psr\Http\Client\ClientInterface::class),
             requestFactory: app(\Psr\Http\Message\RequestFactoryInterface::class),
             streamFactory: app(\Psr\Http\Message\StreamFactoryInterface::class),
