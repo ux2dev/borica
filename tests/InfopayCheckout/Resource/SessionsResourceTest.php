@@ -7,10 +7,11 @@ use GuzzleHttp\Psr7\Response as Psr7Response;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
+use Ux2Dev\Borica\InfopayCheckout\Dto\CreateSessionRequest;
 use Ux2Dev\Borica\InfopayCheckout\Dto\Session;
 use Ux2Dev\Borica\InfopayCheckout\Enum\SessionCreateStatus;
 use Ux2Dev\Borica\InfopayCheckout\Enum\SessionStatusCode;
-use Ux2Dev\Borica\InfopayCheckout\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayCheckout\Resource\SessionsResource;
 
 function sessionsClient(array &$captured, array $responses): ClientInterface
@@ -48,10 +49,10 @@ test('create POSTs authId/authSecret and returns Session', function () {
             'status' => 'Success',
         ])),
     ]);
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
     $resource = new SessionsResource($this->config, $transport);
 
-    $session = $resource->create($this->config->authId, $this->config->authSecret);
+    $session = $resource->create(new CreateSessionRequest($this->config->authId, $this->config->authSecret))->first();
 
     expect($session->sessionId)->toBe('sess-1');
     expect($session->status)->toBe(SessionCreateStatus::Success);
@@ -65,7 +66,7 @@ test('create POSTs authId/authSecret and returns Session', function () {
 test('close POSTs to /sessions/close with Basic auth header', function () {
     $captured = [];
     $client = sessionsClient($captured, [new Psr7Response(204, [], '')]);
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
     $resource = new SessionsResource($this->config, $transport);
 
     $session = new Session('id', 'key', SessionCreateStatus::Success);
@@ -81,7 +82,7 @@ test('check returns SessionStatusCode', function () {
     $client = sessionsClient($captured, [
         new Psr7Response(200, [], json_encode(['sessionStatus' => 'Valid'])),
     ]);
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
     $resource = new SessionsResource($this->config, $transport);
 
     $session = new Session('id', 'key', SessionCreateStatus::Success);

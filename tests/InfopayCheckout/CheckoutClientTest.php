@@ -6,7 +6,7 @@ use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response as Psr7Response;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
-use Ux2Dev\Borica\InfopayCheckout\CheckoutClient;
+use Ux2Dev\Borica\InfopayCheckout\CheckoutArea;
 use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
 use Ux2Dev\Borica\InfopayCheckout\Resource\PaymentRequestsResource;
 use Ux2Dev\Borica\InfopayCheckout\Resource\SessionsResource;
@@ -29,7 +29,7 @@ beforeEach(function () {
         certificate: file_get_contents(__DIR__ . '/../fixtures/test_certificate.pem'),
     );
     $factory = new HttpFactory();
-    $this->client = new CheckoutClient(
+    $this->client = new CheckoutArea(
         config: $this->config,
         httpClient: checkoutStubClient(new Psr7Response(200, [], '{}')),
         requestFactory: $factory,
@@ -52,7 +52,7 @@ test('same resource instance returned on repeated calls', function () {
 
 test('end-to-end sessions->create against stubbed PSR-18 client', function () {
     $factory = new HttpFactory();
-    $client = new CheckoutClient(
+    $client = new CheckoutArea(
         config: $this->config,
         httpClient: checkoutStubClient(new Psr7Response(200, [], json_encode([
             'sessionId' => 'sid',
@@ -63,6 +63,6 @@ test('end-to-end sessions->create against stubbed PSR-18 client', function () {
         streamFactory: $factory,
     );
 
-    $session = $client->sessions()->create('a', 'b');
+    $session = $client->sessions()->create(new \Ux2Dev\Borica\InfopayCheckout\Dto\CreateSessionRequest('a', 'b'))->first();
     expect($session->sessionId)->toBe('sid');
 });

@@ -6,6 +6,7 @@ namespace Ux2Dev\Borica\InfopayErp\Dto;
 
 use DateTimeImmutable;
 use InvalidArgumentException;
+use Ux2Dev\Borica\Contracts\ApiRequest;
 use Ux2Dev\Borica\InfopayErp\Enum\Currency;
 use Ux2Dev\Borica\InfopayErp\Enum\Language;
 
@@ -13,7 +14,7 @@ use Ux2Dev\Borica\InfopayErp\Enum\Language;
  * Request body for POST /api/invoices. Most fields are required per the
  * spec; `additionalInformation` is the only optional top-level field.
  */
-final readonly class InvoiceCreateRequest
+final readonly class InvoiceCreateRequest implements ApiRequest
 {
     public function __construct(
         public string $number,
@@ -30,6 +31,21 @@ final readonly class InvoiceCreateRequest
         if (! preg_match('/^[0-9]{10}$/', $number)) {
             throw new InvalidArgumentException('Invoice number must be exactly 10 digits');
         }
+    }
+
+    public function method(): string
+    {
+        return 'POST';
+    }
+
+    public function endpoint(): string
+    {
+        return '/api/invoices';
+    }
+
+    public function responseClass(): string
+    {
+        return InvoiceCreateResult::class;
     }
 
     /** @return array<string, mixed> */

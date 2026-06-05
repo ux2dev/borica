@@ -19,7 +19,7 @@ use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Enum\Currency;
 use Ux2Dev\Borica\InfopayErp\Enum\Language;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Resource\InvoicesResource;
 use Ux2Dev\Borica\Tests\InfopayErp\FakeHttpClient;
 
@@ -53,7 +53,7 @@ test('create POSTs invoice with polymorphic content + payment method serialized 
     $client = new FakeHttpClient([
         FakeHttpClient::json(201, ['invoiceId' => 'inv-1', 'number' => '0000000001']),
     ]);
-    $resource = new InvoicesResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new InvoicesResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $request = new InvoiceCreateRequest(
         number: '0000000001',
@@ -87,7 +87,7 @@ test('create POSTs invoice with polymorphic content + payment method serialized 
         numberSeriesId: 'series-1',
     );
 
-    $result = $resource->create($this->session, $request);
+    $result = $resource->create($this->session, $request)->first();
 
     expect($result->invoiceId)->toBe('inv-1');
 

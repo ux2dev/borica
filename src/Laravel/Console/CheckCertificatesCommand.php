@@ -26,24 +26,22 @@ class CheckCertificatesCommand extends Command
         if ($this->option('path')) {
             $rows[] = $this->inspect('(explicit)', $this->option('path'), $warningDays, $hasWarning, $hasError);
         } else {
-            foreach (config('borica.cgi.merchants', []) as $name => $cfg) {
-                if (!empty($cfg['certificate'])) {
-                    $rows[] = $this->inspect("cgi.{$name}", $cfg['certificate'], $warningDays, $hasWarning, $hasError);
+            foreach (config('borica.tenants', []) as $tenant => $cfg) {
+                if (!empty($cfg['cgi']['certificate'])) {
+                    $rows[] = $this->inspect("{$tenant}.cgi", $cfg['cgi']['certificate'], $warningDays, $hasWarning, $hasError);
                 }
-            }
-            foreach (config('borica.checkout.merchants', []) as $name => $cfg) {
-                if (!empty($cfg['certificate'])) {
-                    $rows[] = $this->inspect("checkout.{$name}", $cfg['certificate'], $warningDays, $hasWarning, $hasError);
+                if (!empty($cfg['checkout']['certificate'])) {
+                    $rows[] = $this->inspect("{$tenant}.checkout", $cfg['checkout']['certificate'], $warningDays, $hasWarning, $hasError);
                 }
             }
         }
 
         if ($rows === []) {
-            $this->warn('No certificates configured. Set `certificate` on merchants in config/borica.php, or use --path.');
+            $this->warn('No certificates configured. Set `certificate` on a tenant\'s cgi/checkout in config/borica.php, or use --path.');
             return self::SUCCESS;
         }
 
-        $this->table(['Merchant', 'Subject', 'Not After', 'Days Left', 'Status'], $rows);
+        $this->table(['Tenant', 'Subject', 'Not After', 'Days Left', 'Status'], $rows);
 
         if ($hasError) return self::FAILURE;
         if ($hasWarning) return 2;

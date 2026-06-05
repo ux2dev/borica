@@ -2,267 +2,131 @@
 
 declare(strict_types=1);
 
-use Ux2Dev\Borica\Cgi\CgiClient;
-use Ux2Dev\Borica\Laravel\BoricaManager;
+use Ux2Dev\Borica\Borica;
+use Ux2Dev\Borica\Cgi\CgiArea;
 use Ux2Dev\Borica\Cgi\Request\PaymentRequest;
+use Ux2Dev\Borica\Exception\ConfigurationException;
+use Ux2Dev\Borica\Laravel\BoricaManager;
 
-test('resolves default merchant', function () {
-    $manager = app(BoricaManager::class);
-
-    $borica = $manager->merchant('default');
-
-    expect($borica)->toBeInstanceOf(CgiClient::class);
+test('client() resolves the default tenant to a Borica instance', function () {
+    expect(app(BoricaManager::class)->client())->toBeInstanceOf(Borica::class);
 });
 
-test('caches resolved merchants by name', function () {
+test('client() is cached per manager instance', function () {
     $manager = app(BoricaManager::class);
-
-    $first = $manager->merchant('default');
-    $second = $manager->merchant('default');
-
-    expect($first)->toBe($second);
+    expect($manager->client())->toBe($manager->client());
 });
 
-test('resolves merchant from runtime array config', function () {
+test('tenant() returns an immutable clone with the target tenant active', function () {
     $manager = app(BoricaManager::class);
+    $other = $manager->tenant('other');
 
-    $borica = $manager->merchant([
-        'terminal' => 'V1800001',
-        'merchant_id' => 'MERCHANT01',
-        'merchant_name' => 'Runtime Shop',
-        'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
-        'private_key_passphrase' => null,
-        'borica_public_key' => null,
-        'environment' => 'development',
-        'currency' => 'EUR',
-        'country' => 'BG',
-        'timezone_offset' => '+03',
-    ]);
-
-    expect($borica)->toBeInstanceOf(CgiClient::class);
+    expect($other)->not->toBe($manager);
+    expect($manager->currentTenant())->toBe('default');
+    expect($other->currentTenant())->toBe('other');
 });
 
-test('runtime array merchants are not cached', function () {
-    $manager = app(BoricaManager::class);
-
-    $config = [
-        'terminal' => 'V1800001',
-        'merchant_id' => 'MERCHANT01',
-        'merchant_name' => 'Runtime Shop',
-        'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
-        'private_key_passphrase' => null,
-        'borica_public_key' => null,
-        'environment' => 'development',
-        'currency' => 'EUR',
-        'country' => 'BG',
-        'timezone_offset' => '+03',
-    ];
-
-    $first = $manager->merchant($config);
-    $second = $manager->merchant($config);
-
-    expect($first)->not->toBe($second);
+test('cgi() is proxied to the active tenant Borica', function () {
+    expect(app(BoricaManager::class)->cgi())->toBeInstanceOf(CgiArea::class);
 });
 
-test('proxies methods to default merchant', function () {
-    $manager = app(BoricaManager::class);
-
-    $url = $manager->getGatewayUrl();
-
-    expect($url)->toBe('https://3dsgate-dev.borica.bg/cgi-bin/cgi_link');
+test('cgi()->getGatewayUrl() reflects the tenant environment', function () {
+    expect(app(BoricaManager::class)->cgi()->getGatewayUrl())
+        ->toBe('https://3dsgate-dev.borica.bg/cgi-bin/cgi_link');
 });
 
-test('proxies payments() resource to default merchant', function () {
-    $manager = app(BoricaManager::class);
-
-    $request = $manager->payments()->purchase(
+test('cgi()->payments()->purchase() builds a signed PaymentRequest', function () {
+    $request = app(BoricaManager::class)->cgi()->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.50',
         order: '000001',
         description: 'Test payment',
-        mInfo: [
-            'cardholderName' => 'John Doe',
-            'email' => 'john@example.com',
-        ],
-    );
+        mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
+    ));
 
     expect($request)->toBeInstanceOf(PaymentRequest::class);
     expect($request->toArray()['AMOUNT'])->toBe('10.50');
 });
 
-test('resolves private key from file path', function () {
-    config()->set('borica.cgi.merchants.file-based', [
+test('an unknown tenant throws ConfigurationException', function () {
+    app(BoricaManager::class)->tenant('nonexistent')->client();
+})->throws(ConfigurationException::class, 'Borica tenant "nonexistent" is not configured');
+
+test('resolves a CGI private key from a file path', function () {
+    config()->set('borica.tenants.file-based.cgi', [
         'terminal' => 'V1800001',
         'merchant_id' => 'MERCHANT01',
         'merchant_name' => 'File Shop',
         'private_key' => __DIR__ . '/../fixtures/test_private_key.pem',
-        'private_key_passphrase' => null,
-        'borica_public_key' => null,
         'environment' => 'development',
         'currency' => 'EUR',
-        'country' => 'BG',
-        'timezone_offset' => '+03',
     ]);
 
-    $manager = app(BoricaManager::class);
-    $borica = $manager->merchant('file-based');
-
-    expect($borica)->toBeInstanceOf(CgiClient::class);
+    expect(app(BoricaManager::class)->tenant('file-based')->cgi())->toBeInstanceOf(CgiArea::class);
 });
 
-test('resolves private key from raw PEM string', function () {
-    config()->set('borica.cgi.merchants.pem-based', [
+test('resolves a CGI private key from a raw PEM string', function () {
+    config()->set('borica.tenants.pem-based.cgi', [
         'terminal' => 'V1800001',
         'merchant_id' => 'MERCHANT01',
         'merchant_name' => 'PEM Shop',
         'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
-        'private_key_passphrase' => null,
-        'borica_public_key' => null,
         'environment' => 'development',
         'currency' => 'EUR',
-        'country' => 'BG',
-        'timezone_offset' => '+03',
     ]);
 
-    $manager = app(BoricaManager::class);
-    $borica = $manager->merchant('pem-based');
-
-    expect($borica)->toBeInstanceOf(CgiClient::class);
+    expect(app(BoricaManager::class)->tenant('pem-based')->cgi())->toBeInstanceOf(CgiArea::class);
 });
 
-test('throws exception for unknown merchant name', function () {
-    $manager = app(BoricaManager::class);
-
-    $manager->merchant('nonexistent');
-})->throws(InvalidArgumentException::class, 'Borica CGI merchant [nonexistent] is not configured');
-
-test('resolves merchant by terminal ID', function () {
-    $manager = app(BoricaManager::class);
-
-    $borica = $manager->merchantByTerminal('V1800001');
-
-    expect($borica)->toBeInstanceOf(CgiClient::class);
+test('tenantByTerminal maps a configured terminal to its tenant name', function () {
+    expect(app(BoricaManager::class)->tenantByTerminal('V1800001'))->toBe('default');
 });
 
-test('merchantByTerminal returns null for unknown terminal', function () {
-    $manager = app(BoricaManager::class);
-
-    $result = $manager->merchantByTerminal('UNKNOWN1');
-
-    expect($result)->toBeNull();
+test('tenantByTerminal returns null for an unknown terminal', function () {
+    expect(app(BoricaManager::class)->tenantByTerminal('UNKNOWN1'))->toBeNull();
 });
 
-test('finds merchant config name by terminal', function () {
+test('resolveTerminalUsing resolves a tenant from a custom callback', function () {
     $manager = app(BoricaManager::class);
 
-    $name = $manager->findMerchantNameByTerminal('V1800001');
-
-    expect($name)->toBe('default');
-});
-
-test('resolveTerminalUsing resolves merchant from custom callback', function () {
-    $manager = app(BoricaManager::class);
-
-    $manager->resolveTerminalUsing(function (string $terminal): ?array {
-        if ($terminal !== 'DBTERMN1') {
-            return null;
-        }
-
-        return [
-            'name' => 'tenant-a',
+    $manager->resolveTerminalUsing(fn (string $terminal): ?array => $terminal === 'DBTERMN1' ? [
+        'name' => 'tenant-a',
+        'cgi' => [
             'terminal' => 'DBTERMN1',
             'merchant_id' => 'DBMERCH001',
             'merchant_name' => 'DB Tenant A',
             'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
             'environment' => 'development',
             'currency' => 'EUR',
-        ];
-    });
-
-    $borica = $manager->merchantByTerminal('DBTERMN1');
-
-    expect($borica)->toBeInstanceOf(CgiClient::class);
-    expect($borica->getGatewayUrl())->toBe('https://3dsgate-dev.borica.bg/cgi-bin/cgi_link');
-});
-
-test('resolveTerminalUsing returns name from config', function () {
-    $manager = app(BoricaManager::class);
-
-    $manager->resolveTerminalUsing(fn (string $terminal) => $terminal === 'DBTERMN1' ? [
-        'name' => 'tenant-a',
-        'terminal' => 'DBTERMN1',
-        'merchant_id' => 'DBMERCH001',
-        'merchant_name' => 'DB Tenant A',
-        'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
-        'environment' => 'development',
-        'currency' => 'EUR',
+        ],
     ] : null);
 
-    $name = $manager->findMerchantNameByTerminal('DBTERMN1');
-
+    $name = $manager->tenantByTerminal('DBTERMN1');
     expect($name)->toBe('tenant-a');
+    expect($manager->tenant($name)->cgi())->toBeInstanceOf(CgiArea::class);
 });
 
-test('resolveTerminalUsing defaults name to terminal when not provided', function () {
+test('resolveTerminalUsing defaults the tenant name to the terminal', function () {
     $manager = app(BoricaManager::class);
-
-    $manager->resolveTerminalUsing(fn (string $terminal) => $terminal === 'DBTERMN1' ? [
-        'terminal' => 'DBTERMN1',
-        'merchant_id' => 'DBMERCH001',
-        'merchant_name' => 'DB Tenant A',
-        'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
-        'environment' => 'development',
-        'currency' => 'EUR',
+    $manager->resolveTerminalUsing(fn (string $t): ?array => $t === 'DBTERMN1' ? [
+        'cgi' => [
+            'terminal' => 'DBTERMN1',
+            'merchant_id' => 'DBMERCH001',
+            'merchant_name' => 'DB Tenant A',
+            'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
+        ],
     ] : null);
 
-    $name = $manager->findMerchantNameByTerminal('DBTERMN1');
-
-    expect($name)->toBe('DBTERMN1');
+    expect($manager->tenantByTerminal('DBTERMN1'))->toBe('DBTERMN1');
 });
 
-test('resolveTerminalUsing returns null for unmatched terminal', function () {
+test('static tenant config takes precedence over the terminal resolver', function () {
     $manager = app(BoricaManager::class);
-
-    $manager->resolveTerminalUsing(fn () => null);
-
-    expect($manager->merchantByTerminal('UNKNOWN1'))->toBeNull();
-});
-
-test('static config takes precedence over terminal resolver', function () {
-    $manager = app(BoricaManager::class);
-
-    $resolverCalled = false;
-    $manager->resolveTerminalUsing(function () use (&$resolverCalled) {
-        $resolverCalled = true;
+    $called = false;
+    $manager->resolveTerminalUsing(function () use (&$called) {
+        $called = true;
         return null;
     });
 
-    $name = $manager->findMerchantNameByTerminal('V1800001');
-
-    expect($name)->toBe('default');
-    expect($resolverCalled)->toBeFalse();
-});
-
-test('resolved terminal merchant is cached on subsequent merchant() call', function () {
-    $manager = app(BoricaManager::class);
-
-    $callCount = 0;
-    $manager->resolveTerminalUsing(function (string $terminal) use (&$callCount) {
-        $callCount++;
-        return $terminal === 'DBTERMN1' ? [
-            'name' => 'tenant-a',
-            'terminal' => 'DBTERMN1',
-            'merchant_id' => 'DBMERCH001',
-            'merchant_name' => 'DB Tenant A',
-            'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
-            'environment' => 'development',
-            'currency' => 'EUR',
-        ] : null;
-    });
-
-    $manager->findMerchantNameByTerminal('DBTERMN1');
-    $first = $manager->merchant('tenant-a');
-    $second = $manager->merchant('tenant-a');
-
-    expect($first)->toBe($second);
-    expect($callCount)->toBe(1);
+    expect($manager->tenantByTerminal('V1800001'))->toBe('default');
+    expect($called)->toBeFalse();
 });

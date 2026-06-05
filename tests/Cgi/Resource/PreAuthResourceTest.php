@@ -7,7 +7,7 @@ use Ux2Dev\Borica\Cgi\Request\PreAuthCompleteRequest;
 use Ux2Dev\Borica\Cgi\Request\PreAuthRequest;
 use Ux2Dev\Borica\Cgi\Request\PreAuthReversalRequest;
 use Ux2Dev\Borica\Cgi\Resource\PreAuthResource;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\Enum\TransactionType;
@@ -17,7 +17,7 @@ use Ux2Dev\Borica\Signing\Signer;
 beforeEach(function () {
     $privateKey = file_get_contents(__DIR__ . '/../../fixtures/test_private_key.pem');
 
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: 'V1800001',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -37,12 +37,12 @@ beforeEach(function () {
 });
 
 test('create returns signed PreAuthRequest with TR 12', function () {
-    $req = $this->resource->create(
+    $req = $this->resource->create(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.50',
         order: '000001',
         description: 'Preauth',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'j@e.com'],
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PreAuthRequest::class);
     expect($req->getTransactionType())->toBe(TransactionType::PreAuth);
@@ -52,13 +52,13 @@ test('create returns signed PreAuthRequest with TR 12', function () {
 });
 
 test('complete returns signed PreAuthCompleteRequest', function () {
-    $req = $this->resource->complete(
+    $req = $this->resource->complete(new \Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput(
         amount: '10.50',
         order: '000001',
         rrn: '000000000001',
         intRef: 'ABC123',
         description: 'Complete',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PreAuthCompleteRequest::class);
 
@@ -68,13 +68,13 @@ test('complete returns signed PreAuthCompleteRequest', function () {
 });
 
 test('reverse returns signed PreAuthReversalRequest', function () {
-    $req = $this->resource->reverse(
+    $req = $this->resource->reverse(new \Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput(
         amount: '10.50',
         order: '000001',
         rrn: '000000000001',
         intRef: 'ABC123',
         description: 'Reverse preauth',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PreAuthReversalRequest::class);
 

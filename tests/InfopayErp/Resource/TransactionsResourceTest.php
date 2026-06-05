@@ -6,7 +6,7 @@ use GuzzleHttp\Psr7\HttpFactory;
 use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
 use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Resource\TransactionsResource;
 use Ux2Dev\Borica\Tests\InfopayErp\FakeHttpClient;
 
@@ -32,9 +32,9 @@ test('list GETs transactions endpoint with date range', function () {
             'Transactions' => ['Booked' => []],
         ]),
     ]);
-    $resource = new TransactionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new TransactionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
-    $page = $resource->list($this->session, 'acc-1', $this->dateFrom, $this->dateTo);
+    $page = $resource->list($this->session, 'acc-1', $this->dateFrom, $this->dateTo)->first();
 
     expect($page->account?->iban)->toBe('BG1');
     expect($page->transactions?->booked)->toBe([]);
@@ -63,7 +63,7 @@ test('iterate follows Links.Next.href until exhausted', function () {
         ],
     ]);
     $client = new FakeHttpClient([$page1, $page2]);
-    $resource = new TransactionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new TransactionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $amounts = [];
     foreach ($resource->iterate($this->session, 'acc-1', $this->dateFrom, $this->dateTo) as $tx) {
@@ -83,7 +83,7 @@ test('iterate resolves relative Next.href against baseUrl', function () {
     ]);
     $page2 = FakeHttpClient::json(200, ['Transactions' => ['Booked' => []]]);
     $client = new FakeHttpClient([$page1, $page2]);
-    $resource = new TransactionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new TransactionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     iterator_to_array($resource->iterate($this->session, 'acc-1', $this->dateFrom, $this->dateTo));
 
@@ -98,9 +98,9 @@ test('missingDates returns gap report', function () {
             'Account' => ['IBAN' => 'BG1'],
         ]),
     ]);
-    $resource = new TransactionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new TransactionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
-    $report = $resource->missingDates($this->session, 'acc-1', $this->dateFrom, $this->dateTo);
+    $report = $resource->missingDates($this->session, 'acc-1', $this->dateFrom, $this->dateTo)->first();
 
     expect($report->hasDatesNotSynced)->toBeTrue();
     expect($report->notSyncedTransactionsDates)->toHaveCount(2);

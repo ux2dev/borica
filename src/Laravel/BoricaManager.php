@@ -4,106 +4,91 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\Laravel;
 
-use Illuminate\Contracts\Config\Repository as ConfigRepository;
-use InvalidArgumentException;
-use Ux2Dev\Borica\Cgi\CgiClient;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\HttpFactory;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\StreamFactoryInterface;
+use Ux2Dev\Borica\Borica;
+use Ux2Dev\Borica\Config\BoricaConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
-use Ux2Dev\Borica\InfopayCheckout\CheckoutClient;
+use Ux2Dev\Borica\Exception\ConfigurationException;
 use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
 use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
-use Ux2Dev\Borica\InfopayErp\ErpClient;
 
-class BoricaManager
+/**
+ * Laravel integration. Resolves tenant configuration from `config/borica.php`
+ * and exposes a lazy, cached {@see Borica} instance per tenant. Supports
+ * immutable tenant switching via `->tenant('foo')`.
+ */
+final class BoricaManager
 {
-    /** @var array<string, CgiClient> */
-    private array $merchants = [];
+    /** @var array<string, Borica> */
+    private array $instances = [];
 
-    /** @var array<string, CheckoutClient> */
-    private array $checkoutClients = [];
-
-    /** @var array<string, ErpClient> */
-    private array $erpClients = [];
+    private string $currentTenant;
 
     private ?\Closure $terminalResolver = null;
 
-    /** @var array<string, array> */
-    private array $resolvedConfigs = [];
+    /** @var array<string, array<string, mixed>> */
+    private array $resolvedTenants = [];
 
+    /** @param array<string, mixed> $config */
     public function __construct(
-        private readonly ConfigRepository $config,
-    ) {}
+        private readonly array $config,
+        private readonly ?ClientInterface $httpClient = null,
+        private readonly ?RequestFactoryInterface $requestFactory = null,
+        private readonly ?StreamFactoryInterface $streamFactory = null,
+    ) {
+        $this->currentTenant = (string) ($config['default'] ?? 'default');
+    }
 
-    /**
-     * @param callable(string): ?array $resolver
-     */
+    public function tenant(string $name): self
+    {
+        $clone = clone $this;
+        $clone->currentTenant = $name;
+        return $clone;
+    }
+
+    public function currentTenant(): string
+    {
+        return $this->currentTenant;
+    }
+
+    public function client(): Borica
+    {
+        return $this->instances[$this->currentTenant] ??= $this->build($this->currentTenant);
+    }
+
+    /** Forward service accessors: Borica::checkout()->..., Borica::cgi()->... */
+    public function __call(string $method, array $arguments): mixed
+    {
+        return $this->client()->{$method}(...$arguments);
+    }
+
+    /** @param callable(string): ?array $resolver */
     public function resolveTerminalUsing(callable $resolver): void
     {
         $this->terminalResolver = $resolver(...);
     }
 
-    /**
-     * Resolve a CgiClient by merchant name or runtime config array.
-     */
-    public function cgi(string|array|null $name = null): CgiClient
+    /** Map an inbound CGI callback terminal to a tenant name (for callback routing). */
+    public function tenantByTerminal(string $terminal): ?string
     {
-        if (is_array($name)) {
-            return $this->buildCgi($name);
-        }
-
-        $name = $name ?? $this->config->get('borica.cgi.default', 'default');
-
-        if (isset($this->merchants[$name])) {
-            return $this->merchants[$name];
-        }
-
-        if (isset($this->resolvedConfigs[$name])) {
-            $this->merchants[$name] = $this->buildCgi($this->resolvedConfigs[$name]);
-            unset($this->resolvedConfigs[$name]);
-            return $this->merchants[$name];
-        }
-
-        $merchantConfig = $this->config->get("borica.cgi.merchants.{$name}");
-
-        if ($merchantConfig === null) {
-            throw new InvalidArgumentException("Borica CGI merchant [{$name}] is not configured");
-        }
-
-        $this->merchants[$name] = $this->buildCgi($merchantConfig);
-
-        return $this->merchants[$name];
-    }
-
-    /**
-     * Back-compat alias. Prefer cgi().
-     */
-    public function merchant(string|array|null $name = null): CgiClient
-    {
-        return $this->cgi($name);
-    }
-
-    public function merchantByTerminal(string $terminal): ?CgiClient
-    {
-        $name = $this->findMerchantNameByTerminal($terminal);
-        return $name === null ? null : $this->cgi($name);
-    }
-
-    public function findMerchantNameByTerminal(string $terminal): ?string
-    {
-        $merchants = $this->config->get('borica.cgi.merchants', []);
-
-        foreach ($merchants as $name => $merchantConfig) {
-            if (($merchantConfig['terminal'] ?? null) === $terminal) {
-                return $name;
+        $tenants = (array) ($this->config['tenants'] ?? []);
+        foreach ($tenants as $name => $cfg) {
+            if (is_array($cfg) && (($cfg['cgi']['terminal'] ?? null) === $terminal)) {
+                return (string) $name;
             }
         }
 
-        if ($this->terminalResolver) {
-            $config = ($this->terminalResolver)($terminal);
-            if ($config !== null) {
-                $name = $config['name'] ?? $terminal;
-                $this->resolvedConfigs[$name] = $config;
+        if ($this->terminalResolver !== null) {
+            $cfg = ($this->terminalResolver)($terminal);
+            if ($cfg !== null) {
+                $name = (string) ($cfg['name'] ?? $terminal);
+                $this->resolvedTenants[$name] = $cfg;
                 return $name;
             }
         }
@@ -111,144 +96,78 @@ class BoricaManager
         return null;
     }
 
-    public function getGatewayUrl(): string
+    private function build(string $tenant): Borica
     {
-        return $this->cgi()->getGatewayUrl();
-    }
+        $tenants = (array) ($this->config['tenants'] ?? []);
+        $c = $this->resolvedTenants[$tenant] ?? ($tenants[$tenant] ?? null);
 
-    /**
-     * Proxy calls to the default CgiClient for ergonomic chaining
-     * like BoricaManager::payments()->purchase(...).
-     */
-    public function __call(string $method, array $parameters): mixed
-    {
-        return $this->cgi()->{$method}(...$parameters);
-    }
-
-    /**
-     * Resolve a CheckoutClient by merchant name or runtime config array.
-     */
-    public function checkout(string|array|null $name = null): CheckoutClient
-    {
-        if (is_array($name)) {
-            return $this->buildCheckout($name);
+        if (! is_array($c)) {
+            throw new ConfigurationException("Borica tenant \"{$tenant}\" is not configured");
         }
 
-        $name = $name ?? $this->config->get('borica.checkout.default', 'default');
+        $factory = new HttpFactory();
 
-        if (isset($this->checkoutClients[$name])) {
-            return $this->checkoutClients[$name];
-        }
-
-        $merchantConfig = $this->config->get("borica.checkout.merchants.{$name}");
-
-        if ($merchantConfig === null) {
-            throw new InvalidArgumentException("Borica Checkout merchant [{$name}] is not configured");
-        }
-
-        $this->checkoutClients[$name] = $this->buildCheckout($merchantConfig);
-
-        return $this->checkoutClients[$name];
-    }
-
-    /**
-     * @param array<string, mixed> $config
-     */
-    private function buildCheckout(array $config): CheckoutClient
-    {
-        $privateKey = $this->resolveKey($config['private_key'] ?? '') ?? '';
-
-        $certificate = '';
-        if (!empty($config['certificate'])) {
-            $certificate = $this->resolveKey($config['certificate']) ?? '';
-        }
-
-        $checkoutConfig = new CheckoutConfig(
-            baseUrl: $config['base_url'] ?? '',
-            authId: $config['auth_id'] ?? '',
-            authSecret: $config['auth_secret'] ?? '',
-            shopId: $config['shop_id'] ?? '',
-            privateKey: $privateKey,
-            certificate: $certificate,
-            privateKeyPassphrase: $config['private_key_passphrase'] ?? null,
-        );
-
-        return new CheckoutClient(
-            config: $checkoutConfig,
-            httpClient: app(\Psr\Http\Client\ClientInterface::class),
-            requestFactory: app(\Psr\Http\Message\RequestFactoryInterface::class),
-            streamFactory: app(\Psr\Http\Message\StreamFactoryInterface::class),
+        return new Borica(
+            config: $this->buildConfig($c),
+            httpClient: $this->httpClient ?? new Client(),
+            requestFactory: $this->requestFactory ?? $factory,
+            streamFactory: $this->streamFactory ?? $factory,
+            boricaPublicKey: isset($c['cgi']['borica_public_key'])
+                ? $this->resolveKey($c['cgi']['borica_public_key'])
+                : null,
         );
     }
 
-    /**
-     * Resolve an ErpClient by integration name or runtime config array.
-     */
-    public function erp(string|array|null $name = null): ErpClient
+    /** @param array<string, mixed> $c */
+    private function buildConfig(array $c): BoricaConfig
     {
-        if (is_array($name)) {
-            return $this->buildErp($name);
-        }
+        $environment = $this->resolveEnvironment($c['environment'] ?? 'production');
 
-        $name = $name ?? $this->config->get('borica.erp.default', 'default');
-
-        if (isset($this->erpClients[$name])) {
-            return $this->erpClients[$name];
-        }
-
-        $integrationConfig = $this->config->get("borica.erp.integrations.{$name}");
-
-        if ($integrationConfig === null) {
-            throw new InvalidArgumentException("Borica ERP integration [{$name}] is not configured");
-        }
-
-        $this->erpClients[$name] = $this->buildErp($integrationConfig);
-
-        return $this->erpClients[$name];
-    }
-
-    /**
-     * @param array<string, mixed> $config
-     */
-    private function buildErp(array $config): ErpClient
-    {
-        $erpConfig = new ErpConfig(
-            baseUrl: $config['base_url'] ?? '',
-            uniqueId: $config['unique_id'] ?? '',
-            accessToken: $config['access_token'] ?? '',
-        );
-
-        return new ErpClient(
-            config: $erpConfig,
-            httpClient: app(\Psr\Http\Client\ClientInterface::class),
-            requestFactory: app(\Psr\Http\Message\RequestFactoryInterface::class),
-            streamFactory: app(\Psr\Http\Message\StreamFactoryInterface::class),
-        );
-    }
-
-    private function buildCgi(array $config): CgiClient
-    {
-        $privateKey = $this->resolveKey($config['private_key'] ?? '') ?? '';
-        $boricaPublicKey = $this->resolveKey($config['borica_public_key'] ?? null);
-
-        $environment = $this->resolveEnvironment($config['environment'] ?? 'development');
-        $currency = Currency::from(strtoupper($config['currency'] ?? 'EUR'));
-
-        $merchantConfig = new MerchantConfig(
-            terminal: $config['terminal'],
-            merchantId: $config['merchant_id'],
-            merchantName: $config['merchant_name'],
-            privateKey: $privateKey,
+        return new BoricaConfig(
+            cgi: isset($c['cgi']) ? $this->buildCgiConfig($c['cgi'], $environment) : null,
+            checkout: isset($c['checkout']) ? $this->buildCheckoutConfig($c['checkout']) : null,
+            erp: isset($c['erp']) ? $this->buildErpConfig($c['erp']) : null,
             environment: $environment,
-            currency: $currency,
-            country: $config['country'] ?? 'BG',
-            timezoneOffset: $config['timezone_offset'] ?? '+03',
-            privateKeyPassphrase: $config['private_key_passphrase'] ?? null,
         );
+    }
 
-        return new CgiClient(
-            config: $merchantConfig,
-            boricaPublicKey: $boricaPublicKey,
+    /** @param array<string, mixed> $cfg */
+    private function buildCgiConfig(array $cfg, Environment $tenantEnvironment): CgiConfig
+    {
+        return new CgiConfig(
+            terminal: $cfg['terminal'],
+            merchantId: $cfg['merchant_id'],
+            merchantName: $cfg['merchant_name'],
+            privateKey: $this->resolveKey($cfg['private_key'] ?? '') ?? '',
+            environment: isset($cfg['environment']) ? $this->resolveEnvironment($cfg['environment']) : $tenantEnvironment,
+            currency: Currency::from(strtoupper($cfg['currency'] ?? 'EUR')),
+            country: $cfg['country'] ?? 'BG',
+            timezoneOffset: $cfg['timezone_offset'] ?? '+03',
+            privateKeyPassphrase: $cfg['private_key_passphrase'] ?? null,
+        );
+    }
+
+    /** @param array<string, mixed> $cfg */
+    private function buildCheckoutConfig(array $cfg): CheckoutConfig
+    {
+        return new CheckoutConfig(
+            baseUrl: $cfg['base_url'] ?? '',
+            authId: $cfg['auth_id'] ?? '',
+            authSecret: $cfg['auth_secret'] ?? '',
+            shopId: $cfg['shop_id'] ?? '',
+            privateKey: $this->resolveKey($cfg['private_key'] ?? '') ?? '',
+            certificate: ! empty($cfg['certificate']) ? ($this->resolveKey($cfg['certificate']) ?? '') : '',
+            privateKeyPassphrase: $cfg['private_key_passphrase'] ?? null,
+        );
+    }
+
+    /** @param array<string, mixed> $cfg */
+    private function buildErpConfig(array $cfg): ErpConfig
+    {
+        return new ErpConfig(
+            baseUrl: $cfg['base_url'] ?? '',
+            uniqueId: $cfg['unique_id'] ?? '',
+            accessToken: $cfg['access_token'] ?? '',
         );
     }
 
@@ -257,38 +176,23 @@ class BoricaManager
         if ($key === null || $key === '') {
             return null;
         }
-
         if (str_starts_with($key, '-----BEGIN')) {
             return $key;
         }
-
         $realPath = realpath($key);
-
-        if ($realPath === false || !is_file($realPath)) {
-            throw new InvalidArgumentException("Key file does not exist: {$key}");
+        if ($realPath === false || ! is_file($realPath)) {
+            throw new ConfigurationException("Key file does not exist: {$key}");
         }
-
         $contents = file_get_contents($realPath);
-
-        if ($contents === false) {
-            throw new InvalidArgumentException("Unable to read key file: {$key}");
+        if ($contents === false || ! str_contains($contents, '-----BEGIN')) {
+            throw new ConfigurationException("Key file is not a valid PEM key: {$key}");
         }
-
-        if (!str_contains($contents, '-----BEGIN')) {
-            throw new InvalidArgumentException("Key file does not contain a valid PEM key: {$key}");
-        }
-
         return $contents;
     }
 
     private function resolveEnvironment(string $environment): Environment
     {
-        $normalized = strtolower($environment);
-
-        if ($normalized === 'production' || $normalized === 'prod') {
-            return Environment::Production;
-        }
-
-        return Environment::Development;
+        $n = strtolower($environment);
+        return ($n === 'production' || $n === 'prod') ? Environment::Production : Environment::Development;
     }
 }

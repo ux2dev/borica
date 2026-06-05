@@ -34,7 +34,7 @@ final readonly class PreAuthRequest implements RequestInterface
         return TransactionType::PreAuth;
     }
 
-    public function getSigningFields(): array
+    public function signingFields(): array
     {
         return [
             'TERMINAL' => $this->terminal,

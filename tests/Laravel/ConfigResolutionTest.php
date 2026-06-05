@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-test('config has default merchant key', function () {
-    expect(config('borica.cgi.default'))->toBe('default');
+test('config has a default tenant key', function () {
+    expect(config('borica.default'))->toBe('default');
 });
 
-test('config has merchants array', function () {
-    expect(config('borica.cgi.merchants.default'))->toBeArray();
-    expect(config('borica.cgi.merchants.default.terminal'))->toBe('V1800001');
+test('config has a tenants array with the default tenant cgi config', function () {
+    expect(config('borica.tenants.default'))->toBeArray();
+    expect(config('borica.tenants.default.cgi.terminal'))->toBe('V1800001');
 });
 
 test('config has routes section', function () {

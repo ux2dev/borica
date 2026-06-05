@@ -12,7 +12,7 @@ use Ux2Dev\Borica\Exception\SigningException;
 class GenerateCertificateCommand extends Command
 {
     protected $signature = 'borica:generate-certificate
-        {--merchant= : Pre-fill terminal ID from a configured merchant}';
+        {--tenant= : Pre-fill terminal ID from a configured tenant}';
 
     protected $description = 'Generate an RSA private key and CSR for BORICA merchant registration';
 
@@ -66,17 +66,17 @@ class GenerateCertificateCommand extends Command
 
     private function resolveTerminalId(): ?string
     {
-        $merchant = $this->option('merchant');
+        $tenant = $this->option('tenant');
 
-        if ($merchant !== null) {
-            $terminal = config("borica.cgi.merchants.{$merchant}.terminal");
+        if ($tenant !== null) {
+            $terminal = config("borica.tenants.{$tenant}.cgi.terminal");
 
             if ($terminal === null) {
-                $this->error("Merchant [{$merchant}] is not configured.");
+                $this->error("Tenant [{$tenant}] is not configured.");
                 return null;
             }
 
-            $this->info("Using terminal ID from merchant [{$merchant}]: {$terminal}");
+            $this->info("Using terminal ID from tenant [{$tenant}]: {$terminal}");
             return $terminal;
         }
 

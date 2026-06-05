@@ -16,7 +16,7 @@ use Ux2Dev\Borica\InfopayErp\Enum\PaymentState;
 use Ux2Dev\Borica\InfopayErp\Enum\PaymentStatusCode;
 use Ux2Dev\Borica\InfopayErp\Enum\SepaServiceLevel;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Resource\BulkPaymentsResource;
 use Ux2Dev\Borica\InfopayErp\Resource\PaymentsResource;
 use Ux2Dev\Borica\Tests\InfopayErp\FakeHttpClient;
@@ -54,12 +54,12 @@ test('single SEPA payment POSTs DebitorAccount + Payment shape', function () {
             'Links' => ['ScaRedirect' => 'https://3ds.example/x', 'Status' => '/api/payments/p-1/status'],
         ]),
     ]);
-    $resource = new PaymentsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new PaymentsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $result = $resource->createSepa($this->session, new SingleSepaPaymentRequest(
         debtorAccount: new AccountReference('BG80BNBG96611020345678'),
         payment: buildSepa(),
-    ));
+    ))->first();
 
     expect($result->paymentId)->toBe('p-1');
     expect($result->links?->scaRedirect)->toBe('https://3ds.example/x');
@@ -82,7 +82,7 @@ test('bulk SEPA payment requires 2..250 payments and serializes the batch', func
             'PaymentId' => 'b-1', 'TransactionStatus' => 'Accepted', 'ReferencePaymentId' => 'r-1',
         ]),
     ]);
-    $resource = new BulkPaymentsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new BulkPaymentsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $resource->createSepa($this->session, new BulkSepaPaymentRequest(
         debtorAccount: new AccountReference('BG1'),
@@ -101,9 +101,9 @@ test('getStatus parses TransactionState and TransactionStatus', function () {
             'TransactionStatus' => ['Status' => 'Processed', 'IsFinal' => true],
         ]),
     ]);
-    $resource = new PaymentsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new PaymentsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
-    $status = $resource->getStatus($this->session, 'p-1');
+    $status = $resource->getStatus($this->session, 'p-1')->first();
 
     expect($status->transactionState)->toBe(PaymentState::Closed);
     expect($status->transactionStatus?->status)->toBe(PaymentStatusCode::Processed);

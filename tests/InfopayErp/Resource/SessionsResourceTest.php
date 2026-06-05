@@ -7,7 +7,7 @@ use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
 use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionState;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Resource\SessionsResource;
 use Ux2Dev\Borica\Tests\InfopayErp\FakeHttpClient;
 
@@ -30,9 +30,9 @@ test('create POSTs uniqueId/accessToken and returns Session with auth headers', 
             'Status' => 'Success',
         ]),
     ]);
-    $resource = new SessionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SessionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
-    $session = $resource->create();
+    $session = $resource->create()->first();
 
     expect($session->sessionId)->toBe('sess-1');
     expect($session->status)->toBe(SessionCreateStatus::Success);
@@ -54,9 +54,9 @@ test('Status InvaliCredentials maps to enum case (spec typo preserved)', functio
     $client = new FakeHttpClient([
         FakeHttpClient::json(200, ['SessionId' => '', 'Status' => 'InvaliCredentials']),
     ]);
-    $resource = new SessionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SessionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
-    $session = $resource->create();
+    $session = $resource->create()->first();
 
     expect($session->status)->toBe(SessionCreateStatus::InvaliCredentials);
     expect($session->authHeaders())->toBe([]);
@@ -66,10 +66,10 @@ test('check POSTs to /api/session/check with SessionId/SessionKey headers', func
     $client = new FakeHttpClient([
         FakeHttpClient::json(200, ['State' => 'Valid']),
     ]);
-    $resource = new SessionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SessionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $session = new Session('sess-1', SessionCreateStatus::Success, 'sess-key');
-    $result = $resource->check($session);
+    $result = $resource->check($session)->first();
 
     expect($result->state)->toBe(SessionState::Valid);
 
@@ -81,7 +81,7 @@ test('check POSTs to /api/session/check with SessionId/SessionKey headers', func
 
 test('close POSTs to /api/session/close', function () {
     $client = new FakeHttpClient([FakeHttpClient::noContent()]);
-    $resource = new SessionsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SessionsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $resource->close(new Session('sess-1', SessionCreateStatus::Success, 'sess-key'));
 

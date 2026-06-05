@@ -44,3 +44,78 @@ function something()
 {
     // ..
 }
+
+/*
+|--------------------------------------------------------------------------
+| Shared fixtures for the redesigned single-client / tenant API
+|--------------------------------------------------------------------------
+*/
+
+function test_private_key(): string
+{
+    return (string) file_get_contents(__DIR__ . '/fixtures/test_private_key.pem');
+}
+
+function test_merchant_config(): \Ux2Dev\Borica\Config\CgiConfig
+{
+    return new \Ux2Dev\Borica\Config\CgiConfig(
+        terminal: 'V1800001',
+        merchantId: 'MERCHANT01',
+        merchantName: 'Test Shop',
+        privateKey: test_private_key(),
+        environment: \Ux2Dev\Borica\Enum\Environment::Development,
+        currency: \Ux2Dev\Borica\Enum\Currency::EUR,
+        country: 'BG',
+        timezoneOffset: '+03',
+    );
+}
+
+function test_checkout_config(): \Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig
+{
+    return new \Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig(
+        baseUrl: 'https://uat-api-checkout.infopay.bg',
+        authId: 'auth-id',
+        authSecret: 'auth-secret',
+        shopId: 'shop-1',
+        privateKey: test_private_key(),
+        certificate: (string) file_get_contents(__DIR__ . '/fixtures/test_certificate.pem'),
+    );
+}
+
+function test_erp_config(): \Ux2Dev\Borica\InfopayErp\Config\ErpConfig
+{
+    return new \Ux2Dev\Borica\InfopayErp\Config\ErpConfig(
+        baseUrl: 'https://integration.infopay.bg',
+        uniqueId: 'unique-id',
+        accessToken: 'access-token',
+    );
+}
+
+/** A do-nothing PSR-18 client; areas only build it lazily, no calls are made. */
+function test_psr18_client(): \Psr\Http\Client\ClientInterface
+{
+    return new class implements \Psr\Http\Client\ClientInterface {
+        public function sendRequest(\Psr\Http\Message\RequestInterface $request): \Psr\Http\Message\ResponseInterface
+        {
+            return new \GuzzleHttp\Psr7\Response(200, [], '{}');
+        }
+    };
+}
+
+/** A CGI tenant config array with an inline PEM key (for manager tests). */
+function test_cgi_config_array(): array
+{
+    return [
+        'terminal' => 'V1800001',
+        'merchant_id' => 'MERCHANT01',
+        'merchant_name' => 'Test Shop',
+        'environment' => 'development',
+        'currency' => 'EUR',
+        'private_key' => test_private_key(),
+    ];
+}
+
+function test_cgi_area(): \Ux2Dev\Borica\Cgi\CgiArea
+{
+    return new \Ux2Dev\Borica\Cgi\CgiArea(test_merchant_config());
+}

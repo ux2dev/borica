@@ -15,7 +15,7 @@ use Ux2Dev\Borica\InfopayCheckout\Dto\Session;
 use Ux2Dev\Borica\InfopayCheckout\Enum\InstructedAmountCurrency;
 use Ux2Dev\Borica\InfopayCheckout\Enum\PaymentRequestStatusCode;
 use Ux2Dev\Borica\InfopayCheckout\Enum\SessionCreateStatus;
-use Ux2Dev\Borica\InfopayCheckout\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayCheckout\Http\JwsSigner;
 use Ux2Dev\Borica\InfopayCheckout\Resource\PaymentRequestsResource;
 
@@ -65,10 +65,10 @@ test('create sends signed body with X-JWS-Signature and parses response', functi
             ],
         ])),
     ]);
-    $transport = new HttpTransport($httpClient, $this->factory, $this->factory);
+    $transport = new ApiTransport($httpClient, $this->factory, $this->factory);
     $resource = new PaymentRequestsResource($this->config, $transport, new JwsSigner());
 
-    $result = $resource->create($this->session, $this->dto);
+    $result = $resource->create($this->session, $this->dto)->first();
 
     expect($result->paymentRequestId)->toBe('pay-1');
     expect($result->checkoutUrl)->toBe('https://checkout.example/pay-1');
@@ -88,7 +88,7 @@ test('create sends signed body with X-JWS-Signature and parses response', functi
 test('create propagates 401 as AuthenticationException', function () {
     $captured = [];
     $httpClient = paymentsClient($captured, [new Psr7Response(401, [], '{"error":"no session"}')]);
-    $transport = new HttpTransport($httpClient, $this->factory, $this->factory);
+    $transport = new ApiTransport($httpClient, $this->factory, $this->factory);
     $resource = new PaymentRequestsResource($this->config, $transport, new JwsSigner());
 
     expect(fn () => $resource->create($this->session, $this->dto))
@@ -104,10 +104,10 @@ test('getStatus GETs status endpoint and returns PaymentStatus', function () {
             ],
         ])),
     ]);
-    $transport = new HttpTransport($httpClient, $this->factory, $this->factory);
+    $transport = new ApiTransport($httpClient, $this->factory, $this->factory);
     $resource = new PaymentRequestsResource($this->config, $transport, new JwsSigner());
 
-    $status = $resource->getStatus($this->session, 'pay-1');
+    $status = $resource->getStatus($this->session, 'pay-1')->first();
 
     expect($status->paymentRequestStatus?->code)->toBe(PaymentRequestStatusCode::PaymentCreated);
     $req = $captured[0];

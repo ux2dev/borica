@@ -6,7 +6,8 @@ use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response as Psr7Response;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
-use Ux2Dev\Borica\InfopayErp\ErpClient;
+use Ux2Dev\Borica\Exception\ConfigurationException;
+use Ux2Dev\Borica\InfopayErp\ErpArea;
 use Ux2Dev\Borica\Laravel\BoricaManager;
 
 function erpTestClient(\Psr\Http\Message\ResponseInterface $res): ClientInterface
@@ -18,7 +19,7 @@ function erpTestClient(\Psr\Http\Message\ResponseInterface $res): ClientInterfac
 }
 
 beforeEach(function () {
-    config()->set('borica.erp.integrations.default', [
+    config()->set('borica.tenants.default.erp', [
         'base_url' => 'https://integration.infopay.bg',
         'unique_id' => 'a78941c2-3fab-428f-b614-1422b42a0e46',
         'access_token' => 'test-access-token',
@@ -28,25 +29,27 @@ beforeEach(function () {
     app()->bind(\Psr\Http\Message\StreamFactoryInterface::class, fn () => new HttpFactory());
 });
 
-test('BoricaManager::erp returns ErpClient from config', function () {
-    expect(app(BoricaManager::class)->erp())->toBeInstanceOf(ErpClient::class);
+test('Borica::erp returns an ErpArea from tenant config', function () {
+    expect(app(BoricaManager::class)->erp())->toBeInstanceOf(ErpArea::class);
 });
 
-test('BoricaManager::erp caches the client per integration name', function () {
+test('Borica::erp is cached via the per-tenant Borica instance', function () {
     $manager = app(BoricaManager::class);
     expect($manager->erp())->toBe($manager->erp());
 });
 
-test('BoricaManager::erp throws for unknown integration', function () {
-    app(BoricaManager::class)->erp('no-such');
-})->throws(\InvalidArgumentException::class);
+test('Borica::erp throws for an unknown tenant', function () {
+    app(BoricaManager::class)->tenant('no-such')->erp();
+})->throws(ConfigurationException::class);
 
-test('BoricaManager::erp accepts inline config array', function () {
-    $client = app(BoricaManager::class)->erp([
-        'base_url' => 'https://integration.infopay.bg',
-        'unique_id' => 'inline-id',
-        'access_token' => 'inline-token',
+test('a tenant without erp config throws when erp() is accessed', function () {
+    config()->set('borica.tenants.cgi-only', [
+        'cgi' => [
+            'terminal' => 'V1800002',
+            'merchant_id' => 'MERCHANT02',
+            'merchant_name' => 'Other',
+            'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
+        ],
     ]);
-
-    expect($client)->toBeInstanceOf(ErpClient::class);
-});
+    app(BoricaManager::class)->tenant('cgi-only')->erp();
+})->throws(ConfigurationException::class);

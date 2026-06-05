@@ -4,42 +4,37 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Resource;
 
+use Ux2Dev\Borica\Http\ApiResponse;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
 use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Dto\SessionCheckResult;
 use Ux2Dev\Borica\InfopayErp\Dto\SessionCreateRequest;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
 
 final class SessionsResource
 {
     public function __construct(
         private readonly ErpConfig $config,
-        private readonly HttpTransport $transport,
+        private readonly ApiTransport $transport,
     ) {}
 
     /**
      * POST /api/session. Exchanges the merchant's `uniqueId` + `accessToken`
-     * for a session used on all subsequent calls.
+     * for a session used on all subsequent calls. The Session is reached via
+     * the returned envelope's first().
      */
-    public function create(): Session
+    public function create(): ApiResponse
     {
         $request = new SessionCreateRequest(
             uniqueId: $this->config->uniqueId,
             accessToken: $this->config->accessToken,
         );
 
-        $response = $this->transport->sendJson(
-            method: 'POST',
-            url: $this->config->baseUrl . '/api/session',
-            headers: [],
-            body: $request->toArray(),
-        );
-
-        return Session::fromArray($response);
+        return $this->transport->send($request, $this->config->baseUrl);
     }
 
     /** POST /api/session/check — returns the current session's liveness state. */
-    public function check(Session $session): SessionCheckResult
+    public function check(Session $session): ApiResponse
     {
         $response = $this->transport->sendJson(
             method: 'POST',
@@ -47,7 +42,7 @@ final class SessionsResource
             headers: $session->authHeaders(),
         );
 
-        return SessionCheckResult::fromArray($response);
+        return $this->transport->wrap($response, SessionCheckResult::class);
     }
 
     /** POST /api/session/close — terminates the current session. */

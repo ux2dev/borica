@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Ux2Dev\Borica\InfopayCheckout\Dto;
 
 use DateTimeImmutable;
+use Ux2Dev\Borica\Contracts\ApiRequest;
 use Ux2Dev\Borica\InfopayCheckout\Enum\PaymentLanguage;
 
-final readonly class PaymentRequestDto
+final readonly class PaymentRequestDto implements ApiRequest
 {
     /**
      * @param array<int, Account> $beneficiaryAlternativeAccounts
@@ -25,6 +26,21 @@ final readonly class PaymentRequestDto
         public ?string $errorUrl = null,
         public ?PaymentLanguage $language = null,
     ) {}
+
+    public function method(): string
+    {
+        return 'POST';
+    }
+
+    public function endpoint(): string
+    {
+        return '/v1/api/paymentRequests';
+    }
+
+    public function responseClass(): string
+    {
+        return PaymentRequestResult::class;
+    }
 
     /** @return array<string, mixed> */
     public function toArray(): array

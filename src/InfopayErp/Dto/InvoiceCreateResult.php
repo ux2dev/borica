@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Dto;
 
-final readonly class InvoiceCreateResult
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
+final readonly class InvoiceCreateResult implements BoricaResult
 {
     public function __construct(
         public string $invoiceId,
@@ -12,7 +14,7 @@ final readonly class InvoiceCreateResult
     ) {}
 
     /** @param array<string, mixed> $data */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         return new self(
             invoiceId: (string) ($data['invoiceId'] ?? ''),

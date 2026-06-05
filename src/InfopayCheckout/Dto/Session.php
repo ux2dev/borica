@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayCheckout\Dto;
 
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
 use Ux2Dev\Borica\InfopayCheckout\Enum\SessionCreateStatus;
 
-final readonly class Session
+final readonly class Session implements BoricaResult
 {
     public function __construct(
         public string $sessionId,
@@ -17,7 +19,7 @@ final readonly class Session
     /**
      * @param array<string, mixed> $data
      */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         return new self(
             sessionId: (string) ($data['sessionId'] ?? ''),

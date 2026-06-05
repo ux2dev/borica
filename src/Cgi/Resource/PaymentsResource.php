@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Ux2Dev\Borica\Cgi\Resource;
 
 use Psr\Log\LoggerInterface;
+use Ux2Dev\Borica\Cgi\Request\Input\PaymentInput;
+use Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput;
 use Ux2Dev\Borica\Cgi\Request\PaymentRequest;
 use Ux2Dev\Borica\Cgi\Request\ReversalRequest;
 use Ux2Dev\Borica\Cgi\Support\SignsRequests;
 use Ux2Dev\Borica\Cgi\Support\Validator;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\TransactionType;
 use Ux2Dev\Borica\Signing\MacGeneral;
 use Ux2Dev\Borica\Signing\Signer;
@@ -19,102 +21,78 @@ final class PaymentsResource
     use SignsRequests;
 
     public function __construct(
-        protected readonly MerchantConfig $config,
+        protected readonly CgiConfig $config,
         protected readonly MacGeneral $macGeneral,
         protected readonly Signer $signer,
         protected readonly LoggerInterface $logger,
     ) {}
 
-    /**
-     * @param array<string, mixed> $mInfo
-     */
-    public function purchase(
-        string $amount,
-        string $order,
-        string $description,
-        array $mInfo,
-        string $adCustBorOrderId = '',
-        string $language = 'BG',
-        string $email = '',
-        string $merchantUrl = '',
-        ?string $timestamp = null,
-        ?string $nonce = null,
-    ): PaymentRequest {
-        Validator::amount($amount);
-        Validator::order($order);
-        Validator::description($description);
-        Validator::mInfo($mInfo);
-        Validator::email($email);
-        Validator::merchantUrl($merchantUrl);
-        $timestamp = Validator::resolveTimestamp($timestamp);
-        $nonce = Validator::resolveNonce($nonce);
+    public function purchase(PaymentInput $input): PaymentRequest
+    {
+        Validator::amount($input->amount);
+        Validator::order($input->order);
+        Validator::description($input->description);
+        Validator::mInfo($input->mInfo);
+        Validator::email($input->email);
+        Validator::merchantUrl($input->merchantUrl);
+        $timestamp = Validator::resolveTimestamp($input->timestamp);
+        $nonce = Validator::resolveNonce($input->nonce);
 
         $request = new PaymentRequest(
             terminal: $this->config->terminal,
             trtype: (string) TransactionType::Purchase->value,
-            amount: $amount,
+            amount: $input->amount,
             currency: $this->config->currency->value,
-            order: $order,
+            order: $input->order,
             timestamp: $timestamp,
             nonce: $nonce,
             pSign: '',
             merchant: $this->config->merchantId,
             merchantName: $this->config->merchantName,
-            description: $description,
-            adCustBorOrderId: Validator::resolveAdCustBorOrderId($adCustBorOrderId, $order),
+            description: $input->description,
+            adCustBorOrderId: Validator::resolveAdCustBorOrderId($input->adCustBorOrderId, $input->order),
             country: $this->config->country,
             merchGmt: $this->config->timezoneOffset,
             addendum: 'AD,TD',
-            email: $email,
-            merchantUrl: $merchantUrl,
-            language: $language,
-            mInfo: Validator::encodeMInfo($mInfo),
+            email: $input->email,
+            merchantUrl: $input->merchantUrl,
+            language: $input->language,
+            mInfo: Validator::encodeMInfo($input->mInfo),
         );
 
         return $this->signRequest($request);
     }
 
-    public function reverse(
-        string $amount,
-        string $order,
-        string $rrn,
-        string $intRef,
-        string $description,
-        string $adCustBorOrderId = '',
-        string $language = 'BG',
-        string $email = '',
-        string $merchantUrl = '',
-        ?string $timestamp = null,
-        ?string $nonce = null,
-    ): ReversalRequest {
-        Validator::amount($amount);
-        Validator::order($order);
-        Validator::description($description);
-        Validator::email($email);
-        Validator::merchantUrl($merchantUrl);
-        $timestamp = Validator::resolveTimestamp($timestamp);
-        $nonce = Validator::resolveNonce($nonce);
+    public function reverse(ReferencedPaymentInput $input): ReversalRequest
+    {
+        Validator::amount($input->amount);
+        Validator::order($input->order);
+        Validator::description($input->description);
+        Validator::email($input->email);
+        Validator::merchantUrl($input->merchantUrl);
+        $timestamp = Validator::resolveTimestamp($input->timestamp);
+        $nonce = Validator::resolveNonce($input->nonce);
 
         $request = new ReversalRequest(
             terminal: $this->config->terminal,
-            amount: $amount,
+            amount: $input->amount,
             currency: $this->config->currency->value,
-            order: $order,
+            order: $input->order,
             timestamp: $timestamp,
             nonce: $nonce,
             pSign: '',
             merchant: $this->config->merchantId,
             merchantName: $this->config->merchantName,
-            description: $description,
-            rrn: $rrn,
-            intRef: $intRef,
-            adCustBorOrderId: Validator::resolveAdCustBorOrderId($adCustBorOrderId, $order),
+            description: $input->description,
+            rrn: $input->rrn,
+            intRef: $input->intRef,
+            adCustBorOrderId: Validator::resolveAdCustBorOrderId($input->adCustBorOrderId, $input->order),
             country: $this->config->country,
             merchGmt: $this->config->timezoneOffset,
             addendum: 'AD,TD',
-            email: $email,
-            merchantUrl: $merchantUrl,
-            language: $language,
+            email: $input->email,
+            merchantUrl: $input->merchantUrl,
+            language: $input->language,
         );
 
         return $this->signRequest($request);

@@ -10,11 +10,15 @@ use Ux2Dev\Borica\Cgi\Resource\PaymentsResource;
 use Ux2Dev\Borica\Cgi\Resource\PreAuthResource;
 use Ux2Dev\Borica\Cgi\Resource\ResponsesResource;
 use Ux2Dev\Borica\Cgi\Resource\StatusResource;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Signing\MacGeneral;
 use Ux2Dev\Borica\Signing\Signer;
 
-final class CgiClient
+/**
+ * CGI service area: signed form-redirect payments + signed callback parsing.
+ * Not an HTTP API — resources generate form data and verify callbacks.
+ */
+final class CgiArea
 {
     private readonly MacGeneral $macGeneral;
     private readonly Signer $signer;
@@ -26,7 +30,7 @@ final class CgiClient
     private ?ResponsesResource $responses = null;
 
     public function __construct(
-        private readonly MerchantConfig $config,
+        private readonly CgiConfig $config,
         ?LoggerInterface $logger = null,
         private readonly ?string $boricaPublicKey = null,
     ) {
@@ -42,42 +46,21 @@ final class CgiClient
 
     public function payments(): PaymentsResource
     {
-        return $this->payments ??= new PaymentsResource(
-            $this->config,
-            $this->macGeneral,
-            $this->signer,
-            $this->logger,
-        );
+        return $this->payments ??= new PaymentsResource($this->config, $this->macGeneral, $this->signer, $this->logger);
     }
 
     public function preAuth(): PreAuthResource
     {
-        return $this->preAuth ??= new PreAuthResource(
-            $this->config,
-            $this->macGeneral,
-            $this->signer,
-            $this->logger,
-        );
+        return $this->preAuth ??= new PreAuthResource($this->config, $this->macGeneral, $this->signer, $this->logger);
     }
 
     public function status(): StatusResource
     {
-        return $this->status ??= new StatusResource(
-            $this->config,
-            $this->macGeneral,
-            $this->signer,
-            $this->logger,
-        );
+        return $this->status ??= new StatusResource($this->config, $this->macGeneral, $this->signer, $this->logger);
     }
 
     public function responses(): ResponsesResource
     {
-        return $this->responses ??= new ResponsesResource(
-            $this->config,
-            $this->macGeneral,
-            $this->signer,
-            $this->logger,
-            $this->boricaPublicKey,
-        );
+        return $this->responses ??= new ResponsesResource($this->config, $this->macGeneral, $this->signer, $this->logger, $this->boricaPublicKey);
     }
 }

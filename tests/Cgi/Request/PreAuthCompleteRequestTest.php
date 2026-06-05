@@ -58,7 +58,7 @@ test('toArray includes all mandatory fields including RRN and INT_REF', function
     expect($data['LANG'])->toBe('BG');
 });
 
-test('getSigningFields does not include RRN and INT_REF', function () {
+test('signingFields does not include RRN and INT_REF', function () {
     $request = new PreAuthCompleteRequest(
         terminal: 'V1800001',
         amount: '100.50',
@@ -74,7 +74,7 @@ test('getSigningFields does not include RRN and INT_REF', function () {
         intRef: '1234567890ABCDEF',
     );
 
-    $fields = $request->getSigningFields();
+    $fields = $request->signingFields();
 
     expect(array_keys($fields))->toBe(['TERMINAL', 'TRTYPE', 'AMOUNT', 'CURRENCY', 'ORDER', 'TIMESTAMP', 'NONCE']);
     expect($fields)->not->toHaveKey('RRN');

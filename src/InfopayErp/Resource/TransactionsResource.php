@@ -6,18 +6,19 @@ namespace Ux2Dev\Borica\InfopayErp\Resource;
 
 use DateTimeInterface;
 use Generator;
+use Ux2Dev\Borica\Http\ApiResponse;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
 use Ux2Dev\Borica\InfopayErp\Dto\MissingTransactionDates;
 use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Dto\Transaction;
 use Ux2Dev\Borica\InfopayErp\Dto\TransactionsPage;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
 
 final class TransactionsResource
 {
     public function __construct(
         private readonly ErpConfig $config,
-        private readonly HttpTransport $transport,
+        private readonly ApiTransport $transport,
     ) {}
 
     /**
@@ -29,14 +30,14 @@ final class TransactionsResource
         string $accountId,
         DateTimeInterface $dateFrom,
         DateTimeInterface $dateTo,
-    ): TransactionsPage {
-        $url = $this->config->baseUrl . '/api/accounts/' . rawurlencode($accountId) . '/transactions'
-            . '?' . http_build_query([
-                'dateFrom' => $dateFrom->format(DateTimeInterface::ATOM),
-                'dateTo' => $dateTo->format(DateTimeInterface::ATOM),
-            ]);
+    ): ApiResponse {
+        $response = $this->transport->sendJson(
+            method: 'GET',
+            url: $this->buildListUrl($accountId, $dateFrom, $dateTo),
+            headers: $session->authHeaders(),
+        );
 
-        return $this->fetchPage($session, $url);
+        return $this->transport->wrap($response, TransactionsPage::class);
     }
 
     /**
@@ -51,7 +52,7 @@ final class TransactionsResource
         DateTimeInterface $dateFrom,
         DateTimeInterface $dateTo,
     ): Generator {
-        $page = $this->list($session, $accountId, $dateFrom, $dateTo);
+        $page = $this->fetchPage($session, $this->buildListUrl($accountId, $dateFrom, $dateTo));
 
         while (true) {
             foreach ($page->transactions?->booked ?? [] as $tx) {
@@ -76,7 +77,7 @@ final class TransactionsResource
         string $accountId,
         DateTimeInterface $dateFrom,
         DateTimeInterface $dateTo,
-    ): MissingTransactionDates {
+    ): ApiResponse {
         $url = $this->config->baseUrl . '/api/accounts/' . rawurlencode($accountId) . '/transactionsMissingDates'
             . '?' . http_build_query([
                 'dateFrom' => $dateFrom->format(DateTimeInterface::ATOM),
@@ -89,7 +90,16 @@ final class TransactionsResource
             headers: $session->authHeaders(),
         );
 
-        return MissingTransactionDates::fromArray($response);
+        return $this->transport->wrap($response, MissingTransactionDates::class);
+    }
+
+    private function buildListUrl(string $accountId, DateTimeInterface $dateFrom, DateTimeInterface $dateTo): string
+    {
+        return $this->config->baseUrl . '/api/accounts/' . rawurlencode($accountId) . '/transactions'
+            . '?' . http_build_query([
+                'dateFrom' => $dateFrom->format(DateTimeInterface::ATOM),
+                'dateTo' => $dateTo->format(DateTimeInterface::ATOM),
+            ]);
     }
 
     private function fetchPage(Session $session, string $url): TransactionsPage

@@ -8,18 +8,14 @@ use Illuminate\Support\Facades\Facade;
 use Ux2Dev\Borica\Laravel\BoricaManager;
 
 /**
+ * @method static \Ux2Dev\Borica\Borica client()
+ * @method static \Ux2Dev\Borica\Laravel\BoricaManager tenant(string $name)
+ * @method static string currentTenant()
  * @method static void resolveTerminalUsing(callable $resolver)
- * @method static \Ux2Dev\Borica\Cgi\CgiClient cgi(string|array|null $name = null)
- * @method static \Ux2Dev\Borica\InfopayCheckout\CheckoutClient checkout(string|array|null $name = null)
- * @method static \Ux2Dev\Borica\InfopayErp\ErpClient erp(string|array|null $name = null)
- * @method static \Ux2Dev\Borica\Cgi\CgiClient merchant(string|array|null $name = null)
- * @method static \Ux2Dev\Borica\Cgi\CgiClient|null merchantByTerminal(string $terminal)
- * @method static string|null findMerchantNameByTerminal(string $terminal)
- * @method static string getGatewayUrl()
- * @method static \Ux2Dev\Borica\Cgi\Resource\PaymentsResource payments()
- * @method static \Ux2Dev\Borica\Cgi\Resource\PreAuthResource preAuth()
- * @method static \Ux2Dev\Borica\Cgi\Resource\StatusResource status()
- * @method static \Ux2Dev\Borica\Cgi\Resource\ResponsesResource responses()
+ * @method static string|null tenantByTerminal(string $terminal)
+ * @method static \Ux2Dev\Borica\Cgi\CgiArea cgi()
+ * @method static \Ux2Dev\Borica\InfopayCheckout\CheckoutArea checkout()
+ * @method static \Ux2Dev\Borica\InfopayErp\ErpArea erp()
  *
  * @see \Ux2Dev\Borica\Laravel\BoricaManager
  */

@@ -19,57 +19,54 @@ Sponsored by [ux2.dev](https://ux2.dev).
 composer require ux2dev/borica
 ```
 
-## Migrating from v0.2.x to v0.3.x
+## Migrating to v1.0.0-alpha.2
 
-v0.3 restructures the library around per-service resource-based clients to
-accommodate additional BORICA services (Infopay Checkout is next).
+v1.0.0-alpha.2 unifies all three BORICA services behind a single entry point and
+adopts the shared `ux2dev` SDK shape (typed request/result contracts, a response
+envelope for HTTP calls, and a tenant-scoped Laravel manager).
 
-**Namespace change:** `Ux2Dev\Borica\Borica` is replaced by
-`Ux2Dev\Borica\Cgi\CgiClient`. Request and Response classes moved from
-`Ux2Dev\Borica\Request` / `Ux2Dev\Borica\Response` to
-`Ux2Dev\Borica\Cgi\Request` / `Ux2Dev\Borica\Cgi\Response`.
-
-**Method mapping:**
-
-| v0.2                                      | v0.3                                    |
-|-------------------------------------------|-----------------------------------------|
-| `$borica->createPaymentRequest()`         | `$cgi->payments()->purchase()`          |
-| `$borica->createReversalRequest()`        | `$cgi->payments()->reverse()`           |
-| `$borica->createPreAuthRequest()`         | `$cgi->preAuth()->create()`             |
-| `$borica->createPreAuthCompleteRequest()` | `$cgi->preAuth()->complete()`           |
-| `$borica->createPreAuthReversalRequest()` | `$cgi->preAuth()->reverse()`            |
-| `$borica->createStatusCheckRequest()`     | `$cgi->status()->check()`               |
-| `$borica->parseResponse()`                | `$cgi->responses()->parse()`            |
-
-**Laravel config:** wrap the existing `default` + `merchants` block under a top-level `cgi` key:
+**Single client:** the per-service clients (`CgiClient`, `CheckoutClient`,
+`ErpClient`) are replaced by one `Ux2Dev\Borica\Borica` instance exposing three
+service areas:
 
 ```php
-return [
-    'cgi' => [
-        'default' => env('BORICA_MERCHANT', 'default'),
-        'merchants' => [ /* existing entries unchanged */ ],
-    ],
-    // routes, redirect unchanged
-];
+$borica->cgi()->payments()->purchase(...);
+$borica->checkout()->paymentRequests()->create($session, $dto);
+$borica->erp()->payments()->createSepa($session, $request);
 ```
 
-**Facade:** `Borica::createPaymentRequest(...)` becomes either
-`Borica::payments()->purchase(...)` (shorthand via `__call` proxy to the default CGI merchant) or
-`Borica::cgi()->payments()->purchase(...)` (explicit).
+**Typed input DTOs:** CGI methods take input DTOs instead of scalar arguments —
+`PaymentInput` (purchase / pre-auth), `ReferencedPaymentInput` (reversal /
+completion), `StatusInput` (status check).
 
-**Request DTOs:** Constructor properties on `PaymentRequest`, `ReversalRequest`, `PreAuthRequest`, `PreAuthCompleteRequest`, `PreAuthReversalRequest`, and `StatusCheckRequest` remain `private`. Read values via `->toArray()`, `->getTransactionType()`, and `->getSigningFields()`.
+**Response envelope:** Checkout + ERP HTTP calls that return a result DTO now
+return an `Ux2Dev\Borica\Http\ApiResponse`. Reach the typed DTO via `->first()`
+(or `->all()` for lists). CGI keeps honest return types (a signed request object
+or a verified callback `Response`) — there is no HTTP round-trip to wrap.
+
+**Config rename:** `MerchantConfig` is now `CgiConfig`.
+
+**Laravel config:** the `cgi` / `checkout` / `erp` blocks move under per-tenant
+entries in a `tenants` array (see [Laravel Integration](#laravel-integration)).
+Scoping is now per *tenant* (`Borica::tenant('shop-2')->...`) rather than
+per-merchant/per-integration.
 
 ## Configuration
 
-Create a `MerchantConfig` instance with your merchant credentials:
+Outside Laravel, build a `Borica` instance from a `BoricaConfig` (each service is
+optional — a tenant may use only CGI, or all three):
 
 ```php
-use Ux2Dev\Borica\Cgi\CgiClient;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Psr\Http\Client\ClientInterface;            // any PSR-18 client (e.g. Guzzle)
+use Psr\Http\Message\RequestFactoryInterface;   // any PSR-17 factories
+use Psr\Http\Message\StreamFactoryInterface;
+use Ux2Dev\Borica\Borica;
+use Ux2Dev\Borica\Config\BoricaConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 
-$config = new MerchantConfig(
+$cgi = new CgiConfig(
     terminal: 'V1800001',
     merchantId: '1600000001',
     merchantName: 'My Shop',
@@ -81,17 +78,26 @@ $config = new MerchantConfig(
     privateKeyPassphrase: 'secret',         // optional, if key is encrypted
 );
 
-$cgi = new CgiClient($config);
+$borica = new Borica(
+    new BoricaConfig(cgi: $cgi),
+    $httpClient,        // PSR-18 (only used by checkout/erp; CGI needs none)
+    $requestFactory,    // PSR-17
+    $streamFactory,     // PSR-17
+);
 ```
 
-The config validates all inputs on construction. The private key and passphrase are never exposed through public properties or serialization.
+`CgiConfig` validates all inputs on construction. The private key and passphrase
+are never exposed through public properties or serialization. Accessing a service
+that wasn't configured for the tenant (e.g. `$borica->erp()` with no ERP config)
+throws a `ConfigurationException`.
 
 ### PSR-3 Logging
 
-Pass any PSR-3 logger as the second argument:
+Pass any PSR-3 logger as the fifth `Borica` constructor argument; it is handed to
+the CGI and Checkout areas.
 
 ```php
-$cgi = new CgiClient($config, $logger);
+$borica = new Borica(new BoricaConfig(cgi: $cgi), $httpClient, $requestFactory, $streamFactory, $logger);
 ```
 
 ### Gateway URLs
@@ -109,17 +115,29 @@ $gatewayUrl = $cgi->getGatewayUrl();
 
 ## Usage
 
+Reach the CGI service area from a configured `Borica` instance (or the
+`Borica::cgi()` facade in Laravel):
+
+```php
+$cgi = $borica->cgi();
+```
+
+CGI methods take typed input DTOs and return a signed request object ready to be
+rendered as a form / POSTed to the gateway.
+
 ### Payment (Transaction Type 1)
 
 Browser-based payment. Build the request, then POST the form data to the gateway URL.
 
 ```php
-$request = $cgi->payments()->purchase(
+use Ux2Dev\Borica\Cgi\Request\Input\PaymentInput;
+
+$request = $cgi->payments()->purchase(new PaymentInput(
     amount: '49.99',
     order: '000001',
     description: 'Order #000001',
     mInfo: [],
-);
+));
 
 // Build an auto-submitting HTML form
 $gatewayUrl = $cgi->getGatewayUrl();
@@ -140,7 +158,7 @@ Render the form:
 #### Optional parameters
 
 ```php
-$request = $cgi->payments()->purchase(
+$request = $cgi->payments()->purchase(new PaymentInput(
     amount: '49.99',
     order: '000001',
     description: 'Order #000001',
@@ -149,20 +167,20 @@ $request = $cgi->payments()->purchase(
     language: 'EN',                         // form language (default: 'BG')
     email: 'customer@example.com',          // customer email
     merchantUrl: 'https://shop.com/notify', // notification URL (must be HTTPS)
-);
+));
 ```
 
 ### Pre-Authorization (Transaction Type 12)
 
-Reserves an amount on the customer's card without capturing it. Same interface as payment.
+Reserves an amount on the customer's card without capturing it. Same input as payment.
 
 ```php
-$request = $cgi->preAuth()->create(
+$request = $cgi->preAuth()->create(new PaymentInput(
     amount: '100.00',
     order: '000002',
     description: 'Pre-auth for booking #000002',
     mInfo: [],
-);
+));
 
 $formFields = $request->toArray();
 // POST to $cgi->getGatewayUrl()
@@ -173,13 +191,15 @@ $formFields = $request->toArray();
 Captures a previously pre-authorized amount. Server-to-server -- POST directly to the gateway.
 
 ```php
-$request = $cgi->preAuth()->complete(
+use Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput;
+
+$request = $cgi->preAuth()->complete(new ReferencedPaymentInput(
     amount: '100.00',
     order: '000002',
     rrn: $preAuthResponse->getRrn(),       // RRN from the pre-auth response
     intRef: $preAuthResponse->getIntRef(), // INT_REF from the pre-auth response
     description: 'Capture booking #000002',
-);
+));
 
 // POST $request->toArray() to $cgi->getGatewayUrl() via HTTP client
 ```
@@ -189,13 +209,13 @@ $request = $cgi->preAuth()->complete(
 Releases a pre-authorized hold.
 
 ```php
-$request = $cgi->preAuth()->reverse(
+$request = $cgi->preAuth()->reverse(new ReferencedPaymentInput(
     amount: '100.00',
     order: '000002',
     rrn: $preAuthResponse->getRrn(),
     intRef: $preAuthResponse->getIntRef(),
     description: 'Cancel booking #000002',
-);
+));
 ```
 
 ### Reversal (Transaction Type 24)
@@ -203,13 +223,13 @@ $request = $cgi->preAuth()->reverse(
 Reverses a completed payment.
 
 ```php
-$request = $cgi->payments()->reverse(
+$request = $cgi->payments()->reverse(new ReferencedPaymentInput(
     amount: '49.99',
     order: '000001',
     rrn: $paymentResponse->getRrn(),
     intRef: $paymentResponse->getIntRef(),
     description: 'Refund order #000001',
-);
+));
 ```
 
 ### Status Check (Transaction Type 90)
@@ -217,12 +237,13 @@ $request = $cgi->payments()->reverse(
 Query the status of a previous transaction. Server-to-server.
 
 ```php
+use Ux2Dev\Borica\Cgi\Request\Input\StatusInput;
 use Ux2Dev\Borica\Enum\TransactionType;
 
-$request = $cgi->status()->check(
+$request = $cgi->status()->check(new StatusInput(
     order: '000001',
     transactionType: TransactionType::Purchase, // type of the original transaction
-);
+));
 
 // POST $request->toArray() to $cgi->getGatewayUrl() via HTTP client
 ```
@@ -329,9 +350,11 @@ BORICA's Infopay Checkout is a REST API for bank-transfer payments (domestic cre
 ```php
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\HttpFactory;
-use Ux2Dev\Borica\InfopayCheckout\CheckoutClient;
+use Ux2Dev\Borica\Borica;
+use Ux2Dev\Borica\Config\BoricaConfig;
 use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
 use Ux2Dev\Borica\InfopayCheckout\Dto\Account;
+use Ux2Dev\Borica\InfopayCheckout\Dto\CreateSessionRequest;
 use Ux2Dev\Borica\InfopayCheckout\Dto\DomesticCreditTransferBgn;
 use Ux2Dev\Borica\InfopayCheckout\Dto\InstructedAmount;
 use Ux2Dev\Borica\InfopayCheckout\Dto\PaymentRequestDto;
@@ -347,18 +370,13 @@ $config = new CheckoutConfig(
 );
 
 $factory = new HttpFactory();
-$client = new CheckoutClient(
-    config: $config,
-    httpClient: new Client(),
-    requestFactory: $factory,
-    streamFactory: $factory,
-);
+$checkout = (new Borica(new BoricaConfig(checkout: $config), new Client(), $factory, $factory))->checkout();
 
 // 1. Log in to obtain a session
-$session = $client->sessions()->create($config->authId, $config->authSecret);
+$session = $checkout->sessions()->create(new CreateSessionRequest($config->authId, $config->authSecret))->first();
 
-// 2. Create a payment request
-$payment = $client->paymentRequests()->create(
+// 2. Create a payment request (the result DTO is reached via ->first())
+$payment = $checkout->paymentRequests()->create(
     session: $session,
     request: new PaymentRequestDto(
         shopId: $config->shopId,
@@ -372,34 +390,35 @@ $payment = $client->paymentRequests()->create(
         errorUrl: 'https://merchant.com/error',
         language: PaymentLanguage::Bg,
     ),
-);
+)->first();
 
 // 3. Redirect the customer to the checkout URL
 header('Location: ' . $payment->checkoutUrl);
 exit;
 
 // 4. Poll for status (or wait for BORICA callback)
-$status = $client->paymentRequests()->getStatus($session, $payment->paymentRequestId);
+$status = $checkout->paymentRequests()->getStatus($session, $payment->paymentRequestId)->first();
 
-// 5. Close the session when done
-$client->sessions()->close($session);
+// 5. Close the session when done (close() returns void)
+$checkout->sessions()->close($session);
 ```
 
 ### Laravel usage
 
-After adding the `checkout` config block (see Configuration), use the facade:
+After adding a tenant with a `checkout` block (see [Laravel Integration](#laravel-integration)), use the facade:
 
 ```php
+use Ux2Dev\Borica\InfopayCheckout\Dto\CreateSessionRequest;
 use Ux2Dev\Borica\Laravel\Facades\Borica;
 
 $checkout = Borica::checkout();
 
-$session = $checkout->sessions()->create(
-    config('borica.checkout.merchants.default.auth_id'),
-    config('borica.checkout.merchants.default.auth_secret'),
-);
+$session = $checkout->sessions()->create(new CreateSessionRequest(
+    config('borica.tenants.default.checkout.auth_id'),
+    config('borica.tenants.default.checkout.auth_secret'),
+))->first();
 
-$payment = $checkout->paymentRequests()->create($session, $paymentDto);
+$payment = $checkout->paymentRequests()->create($session, $paymentDto)->first();
 ```
 
 ### Supported payment types
@@ -439,7 +458,8 @@ use Ux2Dev\Borica\InfopayErp\Dto\SingleSepaPaymentRequest;
 use Ux2Dev\Borica\InfopayErp\Enum\Currency;
 use Ux2Dev\Borica\InfopayErp\Enum\SepaServiceLevel;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
-use Ux2Dev\Borica\InfopayErp\ErpClient;
+use Ux2Dev\Borica\Borica;
+use Ux2Dev\Borica\Config\BoricaConfig;
 
 $config = new ErpConfig(
     baseUrl: 'https://integration.infopay.bg',
@@ -448,35 +468,30 @@ $config = new ErpConfig(
 );
 
 $factory = new HttpFactory();
-$client = new ErpClient(
-    config: $config,
-    httpClient: new Client(),
-    requestFactory: $factory,
-    streamFactory: $factory,
-);
+$erp = (new Borica(new BoricaConfig(erp: $config), new Client(), $factory, $factory))->erp();
 
-// 1. Create a session — the credentials come from $config
-$session = $client->sessions()->create();
+// 1. Create a session — the credentials come from $config (DTO via ->first())
+$session = $erp->sessions()->create()->first();
 if ($session->status !== SessionCreateStatus::Success) {
     throw new RuntimeException("Auth failed: {$session->status->value}");
 }
 
-// 2. List accounts (with balances)
-$accounts = $client->accounts()->list($session, withBalance: true);
+// 2. List accounts (with balances) — the collection is reached via ->first()
+$accounts = $erp->accounts()->list($session, withBalance: true)->first();
 foreach ($accounts->accounts as $account) {
     echo "{$account->iban}  {$account->currency}\n";
 }
 
-// 3. Trigger sync and wait for it to complete (exponential backoff, capped at 60s)
-$syncState = $client->synchronizations()->waitForSync(
+// 3. Trigger sync and wait for it to complete (returns the final collection)
+$syncState = $erp->synchronizations()->waitForSync(
     session: $session,
     accountIds: ['acc-uuid-1'],
     timeoutSeconds: 60,
 );
 
-// 4. Iterate over every booked transaction in a date range — paginator follows
-//    the HATEOAS Links.Next.href chain automatically.
-foreach ($client->transactions()->iterate(
+// 4. Iterate over every booked transaction in a date range — iterate() yields a
+//    Generator and follows the HATEOAS Links.Next.href chain automatically.
+foreach ($erp->transactions()->iterate(
     session: $session,
     accountId: 'acc-uuid-1',
     dateFrom: new DateTimeImmutable('2026-01-01'),
@@ -485,8 +500,8 @@ foreach ($client->transactions()->iterate(
     echo "{$tx->bookingDate?->format('Y-m-d')}  {$tx->transactionAmount->amount}\n";
 }
 
-// 5. Initiate a single SEPA credit transfer
-$payment = $client->payments()->createSepa($session, new SingleSepaPaymentRequest(
+// 5. Initiate a single SEPA credit transfer (result DTO via ->first())
+$payment = $erp->payments()->createSepa($session, new SingleSepaPaymentRequest(
     debtorAccount: new AccountReference('BG80BNBG96611020345678'),
     payment: new SepaPayment(
         creditorName: 'Acme GmbH',
@@ -496,25 +511,31 @@ $payment = $client->payments()->createSepa($session, new SingleSepaPaymentReques
         remittanceInformationUnstructured: 'Invoice 2026-001',
         serviceLevel: SepaServiceLevel::Inst,
     ),
-));
+))->first();
 
 // 6. The bank may require SCA confirmation in a browser
 header('Location: ' . $payment->links?->scaRedirect);
 
-// 7. Close the session when done
-$client->sessions()->close($session);
+// 7. Close the session when done (close() returns void)
+$erp->sessions()->close($session);
 ```
+
+> Envelope cheatsheet: methods that return a result DTO (`create`, `createSepa`,
+> `getStatus`, `accounts()->list/get`, `currentState`, `transactions()->list`,
+> `missingDates`, `check`) return an `ApiResponse` — unwrap with `->first()` /
+> `->all()`. Methods that don't (`refresh`, `close` → void; `iterate` →
+> `Generator`; `waitForSync` → collection) return their value directly.
 
 ### Laravel usage
 
-After adding the `erp` config block (see Configuration), use the facade:
+After adding a tenant with an `erp` block (see [Laravel Integration](#laravel-integration)), use the facade:
 
 ```php
 use Ux2Dev\Borica\Laravel\Facades\Borica;
 
 $erp = Borica::erp();
-$session = $erp->sessions()->create();
-$accounts = $erp->accounts()->list($session, withBalance: true);
+$session = $erp->sessions()->create()->first();
+$accounts = $erp->accounts()->list($session, withBalance: true)->first();
 ```
 
 ### Session lifecycle is the caller's responsibility
@@ -596,29 +617,28 @@ BORICA_CURRENCY=EUR
 
 The `private_key` config accepts either a file path or a raw PEM string.
 
-The published `config/borica.php` nests merchant configuration under a `cgi` key:
+The published `config/borica.php` groups all three services under per-tenant
+entries in a `tenants` array. Each service block is optional:
 
 ```php
 return [
-    'cgi' => [
-        'default' => env('BORICA_MERCHANT', 'default'),
-        'merchants' => [
-            'default' => [
+    'default' => env('BORICA_TENANT', 'default'),
+
+    'tenants' => [
+        'default' => [
+            'environment' => env('BORICA_ENVIRONMENT', 'production'),
+
+            'cgi' => [
                 'terminal'               => env('BORICA_TERMINAL'),
                 'merchant_id'            => env('BORICA_MERCHANT_ID'),
                 'merchant_name'          => env('BORICA_MERCHANT_NAME'),
-                'environment'            => env('BORICA_ENVIRONMENT', 'development'),
                 'currency'               => env('BORICA_CURRENCY', 'EUR'),
                 'private_key'            => env('BORICA_PRIVATE_KEY'),
                 'private_key_passphrase' => env('BORICA_PRIVATE_KEY_PASSPHRASE'),
+                'borica_public_key'      => env('BORICA_PUBLIC_KEY'),
             ],
-        ],
-    ],
 
-    'checkout' => [
-        'default' => env('BORICA_CHECKOUT_MERCHANT', 'default'),
-        'merchants' => [
-            'default' => [
+            'checkout' => [
                 'base_url'               => env('BORICA_CHECKOUT_BASE_URL'),
                 'auth_id'                => env('BORICA_CHECKOUT_AUTH_ID'),
                 'auth_secret'            => env('BORICA_CHECKOUT_AUTH_SECRET'),
@@ -626,13 +646,8 @@ return [
                 'private_key'            => env('BORICA_CHECKOUT_PRIVATE_KEY'),
                 'private_key_passphrase' => env('BORICA_CHECKOUT_PRIVATE_KEY_PASSPHRASE'),
             ],
-        ],
-    ],
 
-    'erp' => [
-        'default' => env('BORICA_ERP_INTEGRATION', 'default'),
-        'integrations' => [
-            'default' => [
+            'erp' => [
                 'base_url'     => env('BORICA_ERP_BASE_URL'),
                 'unique_id'    => env('BORICA_ERP_UNIQUE_ID'),
                 'access_token' => env('BORICA_ERP_ACCESS_TOKEN'),
@@ -656,30 +671,31 @@ return [
 ### Facade
 
 ```php
+use Ux2Dev\Borica\Cgi\Request\Input\PaymentInput;
 use Ux2Dev\Borica\Laravel\Facades\Borica;
 
-// Create a payment request using the default merchant
-$request = Borica::payments()->purchase(
+// Create a payment request using the default tenant
+$request = Borica::cgi()->payments()->purchase(new PaymentInput(
     amount: '49.99',
     order: '000001',
     description: 'Order #000001',
     mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-);
+));
 
-$gatewayUrl = Borica::getGatewayUrl();
+$gatewayUrl = Borica::cgi()->getGatewayUrl();
 $formFields = $request->toArray();
 ```
 
-### Multiple Merchants
+### Multiple Tenants
 
-Define additional merchants in `config/borica.php`:
+Define additional tenants in `config/borica.php`:
 
 ```php
-'cgi' => [
-    'default' => env('BORICA_MERCHANT', 'default'),
-    'merchants' => [
-        'default' => [ ... ],
-        'second-shop' => [
+'tenants' => [
+    'default' => [ /* ... */ ],
+    'second-shop' => [
+        'environment' => 'production',
+        'cgi' => [
             'terminal' => env('BORICA_SECOND_TERMINAL'),
             'merchant_id' => env('BORICA_SECOND_MERCHANT_ID'),
             // ...
@@ -688,34 +704,18 @@ Define additional merchants in `config/borica.php`:
 ],
 ```
 
-Use a named merchant:
+Switch tenant with the immutable `tenant()` method:
 
 ```php
-Borica::merchant('second-shop')->payments()->purchase(...);
-```
-
-Or use the explicit `cgi()` accessor:
-
-```php
-Borica::cgi('second-shop')->payments()->purchase(...);
-```
-
-Or pass a runtime config array (e.g. from a database):
-
-```php
-Borica::merchant([
-    'terminal' => $tenant->borica_terminal,
-    'merchant_id' => $tenant->borica_merchant_id,
-    'merchant_name' => $tenant->company_name,
-    'private_key' => $tenant->borica_private_key_path,
-    'environment' => $tenant->borica_environment,
-    'currency' => $tenant->currency,
-])->payments()->purchase(...);
+Borica::tenant('second-shop')->cgi()->payments()->purchase($input);
+Borica::tenant('second-shop')->checkout()->sessions()->create($req)->first();
 ```
 
 ### Dynamic Terminal Resolution
 
-For multi-tenant applications where merchants are stored in a database, register a custom terminal resolver in a service provider:
+For applications where tenants are stored in a database, register a custom
+terminal resolver in a service provider. The resolver returns a **tenant config
+array** (the same nested shape as `config('borica.tenants.*')`):
 
 ```php
 use Ux2Dev\Borica\Laravel\Facades\Borica;
@@ -727,19 +727,23 @@ public function boot(): void
         if (!$tenant) return null;
 
         return [
-            'name' => $tenant->slug,
-            'terminal' => $tenant->borica_terminal,
-            'merchant_id' => $tenant->borica_merchant_id,
-            'merchant_name' => $tenant->company_name,
-            'private_key' => $tenant->borica_private_key_path,
+            'name' => $tenant->slug,             // tenant name (defaults to the terminal)
             'environment' => $tenant->borica_environment,
-            'currency' => $tenant->currency,
+            'cgi' => [
+                'terminal' => $tenant->borica_terminal,
+                'merchant_id' => $tenant->borica_merchant_id,
+                'merchant_name' => $tenant->company_name,
+                'private_key' => $tenant->borica_private_key_path,
+                'currency' => $tenant->currency,
+            ],
         ];
     });
 }
 ```
 
-This resolver is used automatically when BORICA sends callbacks -- the middleware looks up the merchant by the `TERMINAL` field in the POST data.
+This resolver is used automatically when BORICA sends callbacks -- the middleware
+maps the `TERMINAL` field in the POST data to a tenant via
+`Borica::tenantByTerminal($terminal)`.
 
 ### Callback Handling
 
@@ -803,7 +807,7 @@ Interactive command to generate an RSA private key and CSR for BORICA merchant r
 
 ```bash
 php artisan borica:generate-certificate
-php artisan borica:generate-certificate --merchant=default  # pre-fills terminal from config
+php artisan borica:generate-certificate --tenant=default  # pre-fills terminal from config
 ```
 
 #### Status Check
@@ -812,7 +816,7 @@ Check the status of a transaction:
 
 ```bash
 php artisan borica:status-check 000001 --type=purchase
-php artisan borica:status-check 000001 --type=pre-auth --merchant=second-shop
+php artisan borica:status-check 000001 --type=pre-auth --tenant=second-shop
 ```
 
 Valid `--type` values: `purchase`, `pre-auth`, `pre-auth-complete`, `pre-auth-reversal`, `reversal`.
@@ -842,7 +846,7 @@ vendor/bin/pest
 ```
 tests/
   CgiClientTest.php                      # Integration tests (full request/response round-trip)
-  Config/MerchantConfigTest.php          # Config validation, defaults, serialization guard
+  Config/CgiConfigTest.php               # Config validation, defaults, serialization guard
   Certificate/CertificateGeneratorTest.php  # CSR/key generation, validation, file output
   Signing/SignerTest.php                 # RSA-SHA256 sign/verify, passphrase, invalid keys
   Signing/MacGeneralTest.php             # MAC field ordering for all transaction types
@@ -879,7 +883,7 @@ The `tests/fixtures/` directory contains RSA key pairs for testing only. These k
 
 ### Writing tests against the library
 
-When testing your own integration code, you can create a test `CgiClient` instance using the development environment and your own test keys. For response parsing tests, sign a mock response with your test private key and pass the matching public key to `parse()`:
+When testing your own integration code, build a `Borica` instance (or a `CgiArea` directly) using the development environment and your own test keys. For response parsing tests, sign a mock response with your test private key and pass the matching public key to `parse()`:
 
 ```php
 $response = $cgi->responses()->parse(

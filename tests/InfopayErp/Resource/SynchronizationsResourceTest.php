@@ -7,7 +7,7 @@ use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
 use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
 use Ux2Dev\Borica\InfopayErp\Enum\SyncCurrentState;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Resource\SynchronizationsResource;
 use Ux2Dev\Borica\Tests\InfopayErp\FakeHttpClient;
 
@@ -25,7 +25,7 @@ beforeEach(function () {
 
 test('refresh POSTs AccountIds payload', function () {
     $client = new FakeHttpClient([FakeHttpClient::noContent()]);
-    $resource = new SynchronizationsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SynchronizationsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $resource->refresh($this->session, ['acc-1', 'acc-2']);
 
@@ -48,9 +48,9 @@ test('currentState GETs and parses sync state collection', function () {
             ],
         ]),
     ]);
-    $resource = new SynchronizationsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SynchronizationsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
-    $state = $resource->currentState($this->session);
+    $state = $resource->currentState($this->session)->first();
 
     expect($state->states)->toHaveCount(1);
     expect($state->states[0]->iban)->toBe('BG80BNBG96611020345678');
@@ -78,7 +78,7 @@ test('waitForSync polls until no account is Processing', function () {
         $processing,
         $done,
     ]);
-    $resource = new SynchronizationsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SynchronizationsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $final = $resource->waitForSync(
         session: $this->session,
@@ -105,7 +105,7 @@ test('waitForSync throws on timeout when state stays Processing', function () {
         FakeHttpClient::noContent(),
         $processing(), $processing(), $processing(), $processing(), $processing(), $processing(),
     ]);
-    $resource = new SynchronizationsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new SynchronizationsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     expect(fn () => $resource->waitForSync(
         session: $this->session,

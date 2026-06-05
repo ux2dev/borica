@@ -54,7 +54,7 @@ test('toArray includes all mandatory fields', function () {
     expect($data['LANG'])->toBe('BG');
 });
 
-test('getSigningFields returns only MAC signing fields', function () {
+test('signingFields returns only MAC signing fields', function () {
     $request = new PaymentRequest(
         terminal: 'V1800001',
         trtype: '1',
@@ -69,7 +69,7 @@ test('getSigningFields returns only MAC signing fields', function () {
         description: 'Test payment',
     );
 
-    $fields = $request->getSigningFields();
+    $fields = $request->signingFields();
 
     expect(array_keys($fields))->toBe(['TERMINAL', 'TRTYPE', 'AMOUNT', 'CURRENCY', 'ORDER', 'TIMESTAMP', 'NONCE']);
     expect($fields)->not->toHaveKey('P_SIGN');

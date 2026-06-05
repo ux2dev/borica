@@ -34,7 +34,7 @@ final readonly class PaymentRequest implements RequestInterface
         return TransactionType::Purchase;
     }
 
-    public function getSigningFields(): array
+    public function signingFields(): array
     {
         return [
             'TERMINAL' => $this->terminal,

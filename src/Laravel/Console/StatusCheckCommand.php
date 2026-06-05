@@ -14,7 +14,7 @@ class StatusCheckCommand extends Command
     protected $signature = 'borica:status-check
         {order : The 6-digit order number}
         {--type= : Transaction type: purchase, pre-auth, reversal, pre-auth-complete, pre-auth-reversal}
-        {--merchant= : Merchant config name (default from config)}';
+        {--tenant= : Tenant config name (default from config)}';
 
     protected $description = 'Check the status of a BORICA transaction';
 
@@ -42,22 +42,24 @@ class StatusCheckCommand extends Command
             return self::FAILURE;
         }
 
-        $merchantName = $this->option('merchant');
-        $borica = $merchantName ? $manager->merchant($merchantName) : $manager->merchant();
+        $tenant = $this->option('tenant');
+        $cgi = ($tenant ? $manager->tenant($tenant) : $manager)->cgi();
 
         $order = $this->argument('order');
 
         try {
-            $request = $borica->status()->check(
-                order: $order,
-                transactionType: $transactionType,
+            $request = $cgi->status()->check(
+                new \Ux2Dev\Borica\Cgi\Request\Input\StatusInput(
+                    order: $order,
+                    transactionType: $transactionType,
+                ),
             );
         } catch (BoricaException $e) {
             $this->error($e->getMessage());
             return self::FAILURE;
         }
 
-        $gatewayUrl = $borica->getGatewayUrl();
+        $gatewayUrl = $cgi->getGatewayUrl();
 
         $this->info("Sending status check to {$gatewayUrl}...");
 
@@ -71,7 +73,7 @@ class StatusCheckCommand extends Command
         parse_str($httpResponse->body(), $responseData);
 
         try {
-            $response = $borica->responses()->parse($responseData, $transactionType);
+            $response = $cgi->responses()->parse($responseData, $transactionType);
         } catch (BoricaException $e) {
             $this->error("Parse error: {$e->getMessage()}");
             return self::FAILURE;

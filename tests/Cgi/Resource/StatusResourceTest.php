@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Psr\Log\NullLogger;
 use Ux2Dev\Borica\Cgi\Request\StatusCheckRequest;
 use Ux2Dev\Borica\Cgi\Resource\StatusResource;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\Enum\TransactionType;
@@ -15,7 +15,7 @@ use Ux2Dev\Borica\Signing\Signer;
 beforeEach(function () {
     $privateKey = file_get_contents(__DIR__ . '/../../fixtures/test_private_key.pem');
 
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: 'V1800001',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -35,7 +35,7 @@ beforeEach(function () {
 });
 
 test('check returns signed StatusCheckRequest with specified trtype', function () {
-    $req = $this->resource->check('000001', TransactionType::Purchase);
+    $req = $this->resource->check(new \Ux2Dev\Borica\Cgi\Request\Input\StatusInput('000001', TransactionType::Purchase));
 
     expect($req)->toBeInstanceOf(StatusCheckRequest::class);
 
@@ -47,7 +47,7 @@ test('check returns signed StatusCheckRequest with specified trtype', function (
 
 test('check uses provided nonce when given', function () {
     $nonce = str_repeat('A', 32);
-    $req = $this->resource->check('000001', TransactionType::PreAuth, nonce: $nonce);
+    $req = $this->resource->check(new \Ux2Dev\Borica\Cgi\Request\Input\StatusInput('000001', TransactionType::PreAuth, nonce: $nonce));
 
     $data = $req->toArray();
     expect($data['NONCE'])->toBe($nonce);

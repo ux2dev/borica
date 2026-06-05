@@ -20,7 +20,7 @@ final readonly class StatusCheckRequest implements RequestInterface
         return TransactionType::StatusCheck;
     }
 
-    public function getSigningFields(): array
+    public function signingFields(): array
     {
         return [
             'TERMINAL' => $this->terminal,

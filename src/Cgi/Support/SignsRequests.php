@@ -7,7 +7,7 @@ namespace Ux2Dev\Borica\Cgi\Support;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
 use Ux2Dev\Borica\Cgi\Request\RequestInterface;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Signing\MacGeneral;
 use Ux2Dev\Borica\Signing\Signer;
 
@@ -15,7 +15,7 @@ use Ux2Dev\Borica\Signing\Signer;
  * Shared signing behaviour for CGI resources.
  *
  * Consuming class must expose:
- *   protected MerchantConfig $config
+ *   protected CgiConfig $config
  *   protected MacGeneral $macGeneral
  *   protected Signer $signer
  *   protected LoggerInterface $logger
@@ -29,7 +29,7 @@ trait SignsRequests
      */
     protected function signRequest(RequestInterface $request): RequestInterface
     {
-        $fields = $request->getSigningFields();
+        $fields = $request->signingFields();
         $fields['MERCHANT'] = $this->config->merchantId;
 
         $signingData = $this->macGeneral->buildRequestSigningData(

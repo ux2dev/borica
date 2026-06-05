@@ -32,10 +32,10 @@ test('generate-certificate command prompts for all fields', function () {
     rmdir($tempDir);
 });
 
-test('generate-certificate with --merchant flag pre-fills terminal', function () {
+test('generate-certificate with --tenant flag pre-fills terminal', function () {
     $tempDir = sys_get_temp_dir() . '/borica_test_' . uniqid();
 
-    $this->artisan('borica:generate-certificate', ['--merchant' => 'default'])
+    $this->artisan('borica:generate-certificate', ['--tenant' => 'default'])
         ->expectsChoice('Environment', 'development', ['development', 'production'])
         ->expectsQuestion('Domain (without protocol, e.g. "merchantdomain.bg")', 'merchantdomain.bg')
         ->expectsQuestion('Organization name', 'Test Org')

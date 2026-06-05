@@ -26,18 +26,20 @@ abstract class TestCase extends BaseTestCase
     protected function defineEnvironment($app): void
     {
         $app['config']->set('app.key', 'base64:' . base64_encode(random_bytes(32)));
-        $app['config']->set('borica.cgi.default', 'default');
-        $app['config']->set('borica.cgi.merchants.default', [
-            'terminal' => 'V1800001',
-            'merchant_id' => 'MERCHANT01',
-            'merchant_name' => 'Test Shop',
-            'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
-            'private_key_passphrase' => null,
-            'borica_public_key' => file_get_contents(__DIR__ . '/../fixtures/test_public_key.pem'),
+        $app['config']->set('borica.default', 'default');
+        $app['config']->set('borica.tenants.default', [
             'environment' => 'development',
-            'currency' => 'EUR',
-            'country' => 'BG',
-            'timezone_offset' => '+03',
+            'cgi' => [
+                'terminal' => 'V1800001',
+                'merchant_id' => 'MERCHANT01',
+                'merchant_name' => 'Test Shop',
+                'private_key' => file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem'),
+                'private_key_passphrase' => null,
+                'borica_public_key' => file_get_contents(__DIR__ . '/../fixtures/test_public_key.pem'),
+                'currency' => 'EUR',
+                'country' => 'BG',
+                'timezone_offset' => '+03',
+            ],
         ]);
         $app['config']->set('borica.routes.enabled', true);
         $app['config']->set('borica.routes.prefix', 'borica');
