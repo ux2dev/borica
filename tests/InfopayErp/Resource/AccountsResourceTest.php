@@ -8,7 +8,7 @@ use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Enum\AccountType;
 use Ux2Dev\Borica\InfopayErp\Enum\BalanceType;
 use Ux2Dev\Borica\InfopayErp\Enum\SessionCreateStatus;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Resource\AccountsResource;
 use Ux2Dev\Borica\Tests\InfopayErp\FakeHttpClient;
 
@@ -26,7 +26,7 @@ beforeEach(function () {
 
 test('list returns AccountCollection without ?withBalance by default', function () {
     $client = new FakeHttpClient([FakeHttpClient::json(200, ['Accounts' => []])]);
-    $resource = new AccountsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new AccountsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $resource->list($this->session);
 
@@ -35,7 +35,7 @@ test('list returns AccountCollection without ?withBalance by default', function 
 
 test('list?withBalance=true includes the query flag', function () {
     $client = new FakeHttpClient([FakeHttpClient::json(200, ['Accounts' => []])]);
-    $resource = new AccountsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new AccountsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
     $resource->list($this->session, withBalance: true);
 
@@ -55,9 +55,9 @@ test('get returns parsed Account with balances', function () {
             ]],
         ]),
     ]);
-    $resource = new AccountsResource($this->config, new HttpTransport($client, $this->factory, $this->factory));
+    $resource = new AccountsResource($this->config, new ApiTransport($client, $this->factory, $this->factory));
 
-    $account = $resource->get($this->session, 'acc-1');
+    $account = $resource->get($this->session, 'acc-1')->first();
 
     expect($account->accountId)->toBe('acc-1');
     expect($account->type)->toBe(AccountType::Current);

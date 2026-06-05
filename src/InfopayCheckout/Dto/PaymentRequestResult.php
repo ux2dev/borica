@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayCheckout\Dto;
 
-final readonly class PaymentRequestResult
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
+final readonly class PaymentRequestResult implements BoricaResult
 {
     public function __construct(
         public string $paymentRequestId,
@@ -15,7 +17,7 @@ final readonly class PaymentRequestResult
     /**
      * @param array<string, mixed> $data
      */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         $links = $data['_links'] ?? [];
         return new self(

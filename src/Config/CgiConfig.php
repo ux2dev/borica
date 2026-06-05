@@ -9,7 +9,7 @@ use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\Enum\SigningSchema;
 use Ux2Dev\Borica\Exception\ConfigurationException;
 
-final readonly class MerchantConfig
+final readonly class CgiConfig
 {
     public function __construct(
         public string $terminal,
@@ -72,14 +72,14 @@ final readonly class MerchantConfig
     public function __serialize(): array
     {
         throw new \LogicException(
-            'MerchantConfig must not be serialized as it contains private key material'
+            'CgiConfig must not be serialized as it contains private key material'
         );
     }
 
     public function __unserialize(array $data): void
     {
         throw new \LogicException(
-            'MerchantConfig must not be unserialized'
+            'CgiConfig must not be unserialized'
         );
     }
 }

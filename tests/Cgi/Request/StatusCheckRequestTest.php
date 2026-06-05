@@ -51,7 +51,7 @@ test('toArray does not include AMOUNT or CURRENCY', function () {
     expect($data)->not->toHaveKey('CURRENCY');
 });
 
-test('getSigningFields returns TERMINAL TRTYPE ORDER NONCE only', function () {
+test('signingFields returns TERMINAL TRTYPE ORDER NONCE only', function () {
     $request = new StatusCheckRequest(
         terminal: 'V1800001',
         order: '000006',
@@ -60,7 +60,7 @@ test('getSigningFields returns TERMINAL TRTYPE ORDER NONCE only', function () {
         tranTrtype: '1',
     );
 
-    $fields = $request->getSigningFields();
+    $fields = $request->signingFields();
 
     expect(array_keys($fields))->toBe(['TERMINAL', 'TRTYPE', 'ORDER', 'NONCE']);
     expect($fields['TRTYPE'])->toBe('90');
@@ -69,7 +69,7 @@ test('getSigningFields returns TERMINAL TRTYPE ORDER NONCE only', function () {
     expect($fields['NONCE'])->toBe('AABBCCDD');
 });
 
-test('getSigningFields does not include TRAN_TRTYPE or P_SIGN', function () {
+test('signingFields does not include TRAN_TRTYPE or P_SIGN', function () {
     $request = new StatusCheckRequest(
         terminal: 'V1800001',
         order: '000006',
@@ -78,7 +78,7 @@ test('getSigningFields does not include TRAN_TRTYPE or P_SIGN', function () {
         tranTrtype: '1',
     );
 
-    $fields = $request->getSigningFields();
+    $fields = $request->signingFields();
 
     expect($fields)->not->toHaveKey('TRAN_TRTYPE');
     expect($fields)->not->toHaveKey('P_SIGN');

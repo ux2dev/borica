@@ -8,7 +8,7 @@ use Psr\Log\LoggerInterface;
 use Ux2Dev\Borica\Cgi\Response\Response;
 use Ux2Dev\Borica\Cgi\Response\ResponseParser;
 use Ux2Dev\Borica\Config\BoricaPublicKeys;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\TransactionType;
 use Ux2Dev\Borica\Signing\MacGeneral;
 use Ux2Dev\Borica\Signing\Signer;
@@ -16,7 +16,7 @@ use Ux2Dev\Borica\Signing\Signer;
 final class ResponsesResource
 {
     public function __construct(
-        private readonly MerchantConfig $config,
+        private readonly CgiConfig $config,
         private readonly MacGeneral $macGeneral,
         private readonly Signer $signer,
         private readonly LoggerInterface $logger,

@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Dto;
 
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
 use Ux2Dev\Borica\InfopayErp\Enum\AccountType;
 
 /**
  * Full account record returned from GET /api/accounts or /api/accounts/{id}.
  * Balances are only populated when ?withBalance=true was requested.
  */
-final readonly class Account
+final readonly class Account implements BoricaResult
 {
     /** @param array<int, Balance> $balances */
     public function __construct(
@@ -26,7 +28,7 @@ final readonly class Account
     ) {}
 
     /** @param array<string, mixed> $data */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         $balances = [];
         foreach ((array) ($data['Balances'] ?? []) as $b) {

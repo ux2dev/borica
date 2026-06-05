@@ -34,7 +34,7 @@ final readonly class ReversalRequest implements RequestInterface
         return TransactionType::Reversal;
     }
 
-    public function getSigningFields(): array
+    public function signingFields(): array
     {
         return [
             'TERMINAL' => $this->terminal,

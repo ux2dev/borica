@@ -5,17 +5,18 @@ declare(strict_types=1);
 namespace Ux2Dev\Borica\InfopayErp\Resource;
 
 use RuntimeException;
+use Ux2Dev\Borica\Http\ApiResponse;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayErp\Config\ErpConfig;
 use Ux2Dev\Borica\InfopayErp\Dto\AccountSyncStateCollection;
 use Ux2Dev\Borica\InfopayErp\Dto\Session;
 use Ux2Dev\Borica\InfopayErp\Dto\SyncRefreshRequest;
-use Ux2Dev\Borica\InfopayErp\Http\HttpTransport;
 
 final class SynchronizationsResource
 {
     public function __construct(
         private readonly ErpConfig $config,
-        private readonly HttpTransport $transport,
+        private readonly ApiTransport $transport,
     ) {}
 
     /**
@@ -43,7 +44,7 @@ final class SynchronizationsResource
      *
      * @param array<int, string> $accountIds
      */
-    public function currentState(Session $session, array $accountIds = []): AccountSyncStateCollection
+    public function currentState(Session $session, array $accountIds = []): ApiResponse
     {
         $url = $this->config->baseUrl . '/api/synchronizations/balancesAndTransactions/currentState';
         if ($accountIds !== []) {
@@ -56,7 +57,7 @@ final class SynchronizationsResource
             headers: $session->authHeaders(),
         );
 
-        return AccountSyncStateCollection::fromArray($response);
+        return $this->transport->wrap($response, AccountSyncStateCollection::class);
     }
 
     /**
@@ -84,7 +85,7 @@ final class SynchronizationsResource
         while (true) {
             usleep($delayMs * 1000);
 
-            $state = $this->currentState($session, $accountIds);
+            $state = $this->currentState($session, $accountIds)->first();
 
             if (!$state->anyProcessing()) {
                 return $state;

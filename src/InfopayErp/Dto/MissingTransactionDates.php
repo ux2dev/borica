@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Dto;
 
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
 use DateTimeImmutable;
 
 /**
  * Response for GET /api/accounts/{id}/transactionsMissingDates — reports
  * the dates in [dateFrom, dateTo] where no transactions have been synced.
  */
-final readonly class MissingTransactionDates
+final readonly class MissingTransactionDates implements BoricaResult
 {
     /** @param array<int, DateTimeImmutable> $notSyncedTransactionsDates */
     public function __construct(
@@ -20,7 +22,7 @@ final readonly class MissingTransactionDates
     ) {}
 
     /** @param array<string, mixed> $data */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         $dates = [];
         foreach ((array) ($data['NotSyncedTransactionsDates'] ?? []) as $d) {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Ux2Dev\Borica\Cgi\CgiClient;
+use Ux2Dev\Borica\Cgi\CgiArea;
 use Ux2Dev\Borica\Cgi\Request\PaymentRequest;
 use Ux2Dev\Borica\Cgi\Request\PreAuthCompleteRequest;
 use Ux2Dev\Borica\Cgi\Request\PreAuthRequest;
@@ -14,7 +14,7 @@ use Ux2Dev\Borica\Cgi\Resource\PreAuthResource;
 use Ux2Dev\Borica\Cgi\Resource\ResponsesResource;
 use Ux2Dev\Borica\Cgi\Resource\StatusResource;
 use Ux2Dev\Borica\Cgi\Response\Response;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\Enum\TransactionType;
@@ -25,7 +25,7 @@ use Ux2Dev\Borica\Signing\Signer;
 beforeEach(function () {
     $privateKey = file_get_contents(__DIR__ . '/../fixtures/test_private_key.pem');
 
-    $this->config = new MerchantConfig(
+    $this->config = new CgiConfig(
         terminal: 'V1800001',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -36,7 +36,7 @@ beforeEach(function () {
         timezoneOffset: '+03',
     );
 
-    $this->client = new CgiClient($this->config);
+    $this->client = new CgiArea($this->config);
 });
 
 test('getGatewayUrl returns environment URL', function () {
@@ -72,14 +72,14 @@ test('same resource instance returned on repeated calls', function () {
 
 test('payments()->purchase returns PaymentRequest with correct fields', function () {
     $timestamp = gmdate('YmdHis');
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '9.00',
         order: '000001',
         description: 'Test payment',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         timestamp: $timestamp,
         nonce: 'AABBCCDDAABBCCDDAABBCCDDAABBCCDD',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PaymentRequest::class);
 
@@ -98,12 +98,12 @@ test('payments()->purchase returns PaymentRequest with correct fields', function
 });
 
 test('payments()->purchase auto-generates timestamp and nonce', function () {
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '9.00',
         order: '000001',
         description: 'Test payment',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 
     $data = $req->toArray();
 
@@ -112,12 +112,12 @@ test('payments()->purchase auto-generates timestamp and nonce', function () {
 });
 
 test('payments()->purchase produces signed PaymentRequest end-to-end', function () {
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.50',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'j@e.com'],
-    );
+    ));
     expect($req)->toBeInstanceOf(PaymentRequest::class);
     $data = $req->toArray();
     expect($data['P_SIGN'])->not->toBe('');
@@ -126,127 +126,127 @@ test('payments()->purchase produces signed PaymentRequest end-to-end', function 
 });
 
 test('payments()->purchase rejects negative amount', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '-10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'Amount must be a positive number with exactly 2 decimal places');
 
 test('payments()->purchase rejects zero amount', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '0.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'Amount must be greater than zero');
 
 test('payments()->purchase rejects amount without two decimal places', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'Amount must be a positive number with exactly 2 decimal places');
 
 test('payments()->purchase rejects non-numeric order', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: 'abc',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'Order must be exactly 6 digits');
 
 test('payments()->purchase rejects order with fewer than 6 digits', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '123',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'Order must be exactly 6 digits');
 
 test('payments()->purchase rejects invalid nonce format', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         nonce: 'short',
-    );
+    ));
 })->throws(ConfigurationException::class, 'Nonce must be exactly 32 uppercase hex characters');
 
 test('payments()->purchase rejects invalid timestamp format', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         timestamp: 'not-a-timestamp',
-    );
+    ));
 })->throws(ConfigurationException::class, 'Timestamp must be exactly 14 digits');
 
 test('payments()->purchase rejects empty description', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: '',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'Description must not be empty');
 
 test('payments()->purchase rejects description exceeding 50 characters', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: str_repeat('A', 51),
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'Description must not exceed 50 characters');
 
 test('payments()->purchase rejects invalid email format', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         email: 'not-an-email',
-    );
+    ));
 })->throws(ConfigurationException::class, 'Invalid email format');
 
 test('payments()->purchase rejects non-HTTPS merchant URL', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         merchantUrl: 'http://ux2.dev/callback',
-    );
+    ));
 })->throws(ConfigurationException::class, 'Merchant URL must use HTTPS');
 
 test('payments()->purchase rejects invalid merchant URL', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         merchantUrl: 'not-a-url',
-    );
+    ));
 })->throws(ConfigurationException::class, 'Invalid merchant URL');
 
 test('payments()->purchase accepts valid email and HTTPS merchant URL', function () {
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         email: 'user@ux2.dev',
         merchantUrl: 'https://shop.ux2.dev/callback',
-    );
+    ));
 
     $data = $req->toArray();
     expect($data['EMAIL'])->toBe('user@ux2.dev');
@@ -258,21 +258,21 @@ test('payments()->purchase rejects oversized mInfo', function () {
     for ($i = 0; $i < 3000; $i++) {
         $hugeArray["key_$i"] = str_repeat('x', 50);
     }
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: $hugeArray,
-    );
+    ));
 })->throws(ConfigurationException::class, 'M_INFO data exceeds maximum allowed size');
 
 test('payments()->purchase AD.CUST_BOR_ORDER_ID defaults to ORDER when not provided', function () {
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 
     $data = $req->toArray();
     expect($data['AD.CUST_BOR_ORDER_ID'])->toBe('000001');
@@ -280,13 +280,13 @@ test('payments()->purchase AD.CUST_BOR_ORDER_ID defaults to ORDER when not provi
 });
 
 test('payments()->purchase AD.CUST_BOR_ORDER_ID strips semicolons and truncates to 22 chars', function () {
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         adCustBorOrderId: 'ORDER;WITH;SEMICOLONS;AND;VERY;LONG;VALUE',
-    );
+    ));
 
     $data = $req->toArray();
     expect($data['AD.CUST_BOR_ORDER_ID'])->toBe('ORDERWITHSEMICOLONSAND')
@@ -295,39 +295,39 @@ test('payments()->purchase AD.CUST_BOR_ORDER_ID strips semicolons and truncates 
 });
 
 test('payments()->purchase rejects mInfo without cardholderName', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'M_INFO must contain a non-empty "cardholderName"');
 
 test('payments()->purchase rejects mInfo without email or phone', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'M_INFO must contain "email" and/or "mobilePhone"');
 
 test('payments()->purchase rejects mInfo with cardholderName exceeding 45 chars', function () {
-    $this->client->payments()->purchase(
+    $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => str_repeat('A', 46), 'email' => 'john@example.com'],
-    );
+    ));
 })->throws(ConfigurationException::class, 'M_INFO "cardholderName" must not exceed 45 characters');
 
 test('payments()->purchase accepts mInfo with phone only', function () {
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.00',
         order: '000001',
         description: 'Test',
         mInfo: ['cardholderName' => 'John Doe', 'mobilePhone' => ['cc' => '359', 'subscriber' => '888123456']],
-    );
+    ));
 
     expect($req->toArray())->toHaveKey('M_INFO');
 });
@@ -338,7 +338,7 @@ test('payments()->purchase accepts mInfo with phone only', function () {
 
 test('payments()->reverse returns ReversalRequest with correct fields', function () {
     $timestamp = gmdate('YmdHis');
-    $req = $this->client->payments()->reverse(
+    $req = $this->client->payments()->reverse(new \Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput(
         amount: '9.00',
         order: '000001',
         rrn: '012345678901',
@@ -346,7 +346,7 @@ test('payments()->reverse returns ReversalRequest with correct fields', function
         description: 'Test reversal',
         timestamp: $timestamp,
         nonce: 'AABBCCDDAABBCCDDAABBCCDDAABBCCDD',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(ReversalRequest::class);
 
@@ -364,11 +364,11 @@ test('payments()->reverse returns ReversalRequest with correct fields', function
 // ---------------------------------------------------------------------------
 
 test('status()->check returns StatusCheckRequest with correct fields', function () {
-    $req = $this->client->status()->check(
+    $req = $this->client->status()->check(new \Ux2Dev\Borica\Cgi\Request\Input\StatusInput(
         order: '000001',
         transactionType: TransactionType::Purchase,
         nonce: 'AABBCCDDAABBCCDDAABBCCDDAABBCCDD',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(StatusCheckRequest::class);
 
@@ -385,12 +385,12 @@ test('status()->check returns StatusCheckRequest with correct fields', function 
 // ---------------------------------------------------------------------------
 
 test('preAuth()->create returns PreAuthRequest with correct fields', function () {
-    $req = $this->client->preAuth()->create(
+    $req = $this->client->preAuth()->create(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '50.00',
         order: '000002',
         description: 'Pre-auth test',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PreAuthRequest::class);
 
@@ -409,13 +409,13 @@ test('preAuth()->create returns PreAuthRequest with correct fields', function ()
 // ---------------------------------------------------------------------------
 
 test('preAuth()->complete returns PreAuthCompleteRequest with correct fields', function () {
-    $req = $this->client->preAuth()->complete(
+    $req = $this->client->preAuth()->complete(new \Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput(
         amount: '50.00',
         order: '000002',
         rrn: '012345678901',
         intRef: 'ABCDEF123456',
         description: 'Complete pre-auth',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PreAuthCompleteRequest::class);
 
@@ -434,13 +434,13 @@ test('preAuth()->complete returns PreAuthCompleteRequest with correct fields', f
 // ---------------------------------------------------------------------------
 
 test('preAuth()->reverse returns PreAuthReversalRequest with correct fields', function () {
-    $req = $this->client->preAuth()->reverse(
+    $req = $this->client->preAuth()->reverse(new \Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput(
         amount: '50.00',
         order: '000002',
         rrn: '012345678901',
         intRef: 'ABCDEF123456',
         description: 'Reverse pre-auth',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PreAuthReversalRequest::class);
 
@@ -465,14 +465,14 @@ test('responses()->parse full round-trip: purchase request signed mock response'
     $timestamp = gmdate('YmdHis');
     $nonce = 'AABBCCDDAABBCCDDAABBCCDDAABBCCDD';
 
-    $req = $this->client->payments()->purchase(
+    $req = $this->client->payments()->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '9.00',
         order: '000001',
         description: 'Test payment',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'john@example.com'],
         timestamp: $timestamp,
         nonce: $nonce,
-    );
+    ));
 
     $requestData = $req->toArray();
 

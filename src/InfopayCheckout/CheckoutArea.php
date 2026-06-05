@@ -9,15 +9,16 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
-use Ux2Dev\Borica\InfopayCheckout\Http\HttpTransport;
 use Ux2Dev\Borica\InfopayCheckout\Http\JwsSigner;
 use Ux2Dev\Borica\InfopayCheckout\Resource\PaymentRequestsResource;
 use Ux2Dev\Borica\InfopayCheckout\Resource\SessionsResource;
 
-final class CheckoutClient
+/** Infopay Checkout service area. */
+final class CheckoutArea
 {
-    private readonly HttpTransport $transport;
+    private readonly ApiTransport $transport;
     private readonly JwsSigner $jwsSigner;
     private readonly LoggerInterface $logger;
 
@@ -31,7 +32,7 @@ final class CheckoutClient
         StreamFactoryInterface $streamFactory,
         ?LoggerInterface $logger = null,
     ) {
-        $this->transport = new HttpTransport($httpClient, $requestFactory, $streamFactory);
+        $this->transport = new ApiTransport($httpClient, $requestFactory, $streamFactory);
         $this->jwsSigner = new JwsSigner();
         $this->logger = $logger ?? new NullLogger();
     }
@@ -43,10 +44,6 @@ final class CheckoutClient
 
     public function paymentRequests(): PaymentRequestsResource
     {
-        return $this->paymentRequests ??= new PaymentRequestsResource(
-            $this->config,
-            $this->transport,
-            $this->jwsSigner,
-        );
+        return $this->paymentRequests ??= new PaymentRequestsResource($this->config, $this->transport, $this->jwsSigner);
     }
 }

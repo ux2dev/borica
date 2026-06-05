@@ -24,7 +24,7 @@ class VerifyBoricaSignature
         $data = $request->post();
         $terminal = $data['TERMINAL'] ?? '';
 
-        $merchantName = $this->manager->findMerchantNameByTerminal($terminal);
+        $merchantName = $this->manager->tenantByTerminal($terminal);
 
         if ($merchantName === null) {
             $this->logger->warning('BORICA callback from unknown terminal', [
@@ -47,8 +47,8 @@ class VerifyBoricaSignature
         }
 
         try {
-            $borica = $this->manager->merchant($merchantName);
-            $response = $borica->responses()->parse($data, $transactionType);
+            $cgi = $this->manager->tenant($merchantName)->cgi();
+            $response = $cgi->responses()->parse($data, $transactionType);
         } catch (BoricaException $e) {
             $this->logger->warning('BORICA signature verification failed', [
                 'terminal' => $terminal,

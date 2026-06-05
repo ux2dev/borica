@@ -55,7 +55,7 @@ test('status-check command displays failed response', function () {
         ->assertSuccessful();
 });
 
-test('status-check accepts merchant option', function () {
+test('status-check accepts tenant option', function () {
     $data = $this->buildSignedCallbackData();
 
     Http::fake([
@@ -65,7 +65,7 @@ test('status-check accepts merchant option', function () {
     $this->artisan('borica:status-check', [
         'order' => '000001',
         '--type' => 'purchase',
-        '--merchant' => 'default',
+        '--tenant' => 'default',
     ])
         ->assertSuccessful();
 });

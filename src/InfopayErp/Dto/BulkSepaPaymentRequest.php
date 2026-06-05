@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Ux2Dev\Borica\InfopayErp\Dto;
 
 use InvalidArgumentException;
+use Ux2Dev\Borica\Contracts\ApiRequest;
 
 /**
  * POST /api/bulk-payments/sepa-credit-transfers — debtor account + 2..250
  * SEPA payments. Wire preserves the spec typo `DebitorAccount`.
  */
-final readonly class BulkSepaPaymentRequest
+final readonly class BulkSepaPaymentRequest implements ApiRequest
 {
     private const int MIN_PAYMENTS = 2;
 
@@ -30,6 +31,21 @@ final readonly class BulkSepaPaymentRequest
                 $count,
             ));
         }
+    }
+
+    public function method(): string
+    {
+        return 'POST';
+    }
+
+    public function endpoint(): string
+    {
+        return '/api/bulk-payments/sepa-credit-transfers';
+    }
+
+    public function responseClass(): string
+    {
+        return PaymentResult::class;
     }
 
     /** @return array<string, mixed> */

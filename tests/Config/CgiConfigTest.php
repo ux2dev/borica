@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\Exception\ConfigurationException;
@@ -12,7 +12,7 @@ beforeEach(function () {
 });
 
 test('creates valid config with defaults', function () {
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -32,7 +32,7 @@ test('creates valid config with defaults', function () {
 });
 
 test('throws ConfigurationException on empty terminal', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: '',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -43,7 +43,7 @@ test('throws ConfigurationException on empty terminal', function () {
 })->throws(ConfigurationException::class, 'terminal must be exactly 8 alphanumeric characters');
 
 test('throws ConfigurationException on terminal with special characters', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: 'V180@001',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -54,7 +54,7 @@ test('throws ConfigurationException on terminal with special characters', functi
 })->throws(ConfigurationException::class, 'terminal must be exactly 8 alphanumeric characters');
 
 test('throws ConfigurationException on terminal with wrong length', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: 'V18',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -65,7 +65,7 @@ test('throws ConfigurationException on terminal with wrong length', function () 
 })->throws(ConfigurationException::class, 'terminal must be exactly 8 alphanumeric characters');
 
 test('throws ConfigurationException on empty merchantId', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: '12345678',
         merchantId: '',
         merchantName: 'Test Shop',
@@ -76,7 +76,7 @@ test('throws ConfigurationException on empty merchantId', function () {
 })->throws(ConfigurationException::class, 'merchantId must be exactly 10 alphanumeric characters');
 
 test('throws ConfigurationException on merchantId with wrong length', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: '12345678',
         merchantId: 'SHORT',
         merchantName: 'Test Shop',
@@ -87,7 +87,7 @@ test('throws ConfigurationException on merchantId with wrong length', function (
 })->throws(ConfigurationException::class, 'merchantId must be exactly 10 alphanumeric characters');
 
 test('throws ConfigurationException on empty merchantName', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: '',
@@ -98,7 +98,7 @@ test('throws ConfigurationException on empty merchantName', function () {
 })->throws(ConfigurationException::class, 'merchantName must not be empty');
 
 test('throws ConfigurationException on empty privateKey', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -109,7 +109,7 @@ test('throws ConfigurationException on empty privateKey', function () {
 })->throws(ConfigurationException::class, 'privateKey must not be empty');
 
 test('throws LogicException on serialize', function () {
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -119,10 +119,10 @@ test('throws LogicException on serialize', function () {
     );
 
     serialize($config);
-})->throws(\LogicException::class, 'MerchantConfig must not be serialized');
+})->throws(\LogicException::class, 'CgiConfig must not be serialized');
 
 test('throws ConfigurationException on invalid private key', function () {
-    new MerchantConfig(
+    new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -133,7 +133,7 @@ test('throws ConfigurationException on invalid private key', function () {
 })->throws(ConfigurationException::class, 'privateKey is not a valid PEM private key');
 
 test('throws LogicException on unserialize', function () {
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -143,10 +143,10 @@ test('throws LogicException on unserialize', function () {
     );
 
     $config->__unserialize([]);
-})->throws(\LogicException::class, 'MerchantConfig must not be unserialized');
+})->throws(\LogicException::class, 'CgiConfig must not be unserialized');
 
 test('debugInfo redacts private key and passphrase', function () {
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -165,7 +165,7 @@ test('debugInfo redacts private key and passphrase', function () {
 });
 
 test('debugInfo shows null passphrase when not set', function () {
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -180,7 +180,7 @@ test('debugInfo shows null passphrase when not set', function () {
 });
 
 test('defaults to EUR currency when not specified', function () {
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -192,7 +192,7 @@ test('defaults to EUR currency when not specified', function () {
 });
 
 test('custom country and timezone override defaults', function () {
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: '12345678',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',

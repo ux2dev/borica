@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Dto;
 
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
 use Ux2Dev\Borica\InfopayErp\Enum\PaymentState;
 
 /**
@@ -11,7 +13,7 @@ use Ux2Dev\Borica\InfopayErp\Enum\PaymentState;
  * the coarse state (New/Sent/Locked/Closed) plus the nested transaction
  * status object with the fine-grained status code and finality flag.
  */
-final readonly class PaymentStatus
+final readonly class PaymentStatus implements BoricaResult
 {
     public function __construct(
         public PaymentState $transactionState,
@@ -19,7 +21,7 @@ final readonly class PaymentStatus
     ) {}
 
     /** @param array<string, mixed> $data */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         return new self(
             transactionState: PaymentState::from((string) ($data['TransactionState'] ?? '')),

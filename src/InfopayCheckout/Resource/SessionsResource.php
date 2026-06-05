@@ -4,31 +4,23 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayCheckout\Resource;
 
+use Ux2Dev\Borica\Http\ApiResponse;
+use Ux2Dev\Borica\Http\ApiTransport;
 use Ux2Dev\Borica\InfopayCheckout\Config\CheckoutConfig;
+use Ux2Dev\Borica\InfopayCheckout\Dto\CreateSessionRequest;
 use Ux2Dev\Borica\InfopayCheckout\Dto\Session;
 use Ux2Dev\Borica\InfopayCheckout\Enum\SessionStatusCode;
-use Ux2Dev\Borica\InfopayCheckout\Http\HttpTransport;
 
 final class SessionsResource
 {
     public function __construct(
         private readonly CheckoutConfig $config,
-        private readonly HttpTransport $transport,
+        private readonly ApiTransport $transport,
     ) {}
 
-    public function create(string $authId, string $authSecret): Session
+    public function create(CreateSessionRequest $request): ApiResponse
     {
-        $response = $this->transport->sendJson(
-            method: 'POST',
-            url: $this->config->baseUrl . '/v1/api/sessions',
-            headers: [],
-            body: [
-                'authId' => $authId,
-                'authSecret' => $authSecret,
-            ],
-        );
-
-        return Session::fromArray($response);
+        return $this->transport->send($request, $this->config->baseUrl);
     }
 
     public function close(Session $session): void

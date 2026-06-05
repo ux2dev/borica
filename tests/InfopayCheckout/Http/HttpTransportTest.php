@@ -11,7 +11,7 @@ use Ux2Dev\Borica\Exception\ApiException;
 use Ux2Dev\Borica\Exception\AuthenticationException;
 use Ux2Dev\Borica\Exception\InvalidResponseException;
 use Ux2Dev\Borica\Exception\TransportException;
-use Ux2Dev\Borica\InfopayCheckout\Http\HttpTransport;
+use Ux2Dev\Borica\Http\ApiTransport;
 
 function makeClient(callable $handler): ClientInterface
 {
@@ -35,7 +35,7 @@ test('POST with JSON body returns parsed response for 2xx', function () {
         return new Response(200, ['Content-Type' => 'application/json'], json_encode(['ok' => true]));
     });
 
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
     $result = $transport->sendJson(
         method: 'POST',
@@ -58,7 +58,7 @@ test('GET with no body omits Content-Type', function () {
         return new Response(200, [], json_encode(['status' => 'ok']));
     });
 
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
     $result = $transport->sendJson('GET', 'https://api.example.com/status/abc', []);
 
@@ -69,7 +69,7 @@ test('GET with no body omits Content-Type', function () {
 
 test('401 maps to AuthenticationException', function () {
     $client = makeClient(fn () => new Response(401, [], json_encode(['error' => 'unauthorized'])));
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
     expect(fn () => $transport->sendJson('GET', 'https://x', []))
         ->toThrow(AuthenticationException::class);
@@ -77,7 +77,7 @@ test('401 maps to AuthenticationException', function () {
 
 test('400 and other non-2xx map to ApiException with status + body', function () {
     $client = makeClient(fn () => new Response(409, [], json_encode(['error' => 'conflict'])));
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
     try {
         $transport->sendJson('POST', 'https://x', [], ['foo' => 'bar']);
@@ -92,7 +92,7 @@ test('PSR-18 ClientException maps to TransportException', function () {
     $client = makeClient(function () {
         throw new class extends \RuntimeException implements ClientExceptionInterface {};
     });
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
     expect(fn () => $transport->sendJson('GET', 'https://x', []))
         ->toThrow(TransportException::class);
@@ -100,23 +100,24 @@ test('PSR-18 ClientException maps to TransportException', function () {
 
 test('non-JSON body on 200 throws InvalidResponseException', function () {
     $client = makeClient(fn () => new Response(200, [], '<html>not json</html>'));
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
     expect(fn () => $transport->sendJson('GET', 'https://x', []))
         ->toThrow(InvalidResponseException::class);
 });
 
-test('empty body on 200 throws InvalidResponseException', function () {
+test('empty body on 200 returns an empty array (unified tolerant transport)', function () {
+    // The merged ApiTransport adopts the ERP variant's tolerant baseline:
+    // an empty 2xx body decodes to [] rather than throwing.
     $client = makeClient(fn () => new Response(200, [], ''));
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
-    expect(fn () => $transport->sendJson('GET', 'https://x', []))
-        ->toThrow(InvalidResponseException::class);
+    expect($transport->sendJson('GET', 'https://x', []))->toBe([]);
 });
 
 test('204 No Content returns empty array without parsing body', function () {
     $client = makeClient(fn () => new Response(204, [], ''));
-    $transport = new HttpTransport($client, $this->factory, $this->factory);
+    $transport = new ApiTransport($client, $this->factory, $this->factory);
 
     expect($transport->sendJson('POST', 'https://x', []))->toBe([]);
 });

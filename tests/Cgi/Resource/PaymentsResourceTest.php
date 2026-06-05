@@ -6,7 +6,7 @@ use Psr\Log\NullLogger;
 use Ux2Dev\Borica\Cgi\Request\PaymentRequest;
 use Ux2Dev\Borica\Cgi\Request\ReversalRequest;
 use Ux2Dev\Borica\Cgi\Resource\PaymentsResource;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\Enum\TransactionType;
@@ -17,7 +17,7 @@ use Ux2Dev\Borica\Signing\Signer;
 beforeEach(function () {
     $privateKey = file_get_contents(__DIR__ . '/../../fixtures/test_private_key.pem');
 
-    $this->config = new MerchantConfig(
+    $this->config = new CgiConfig(
         terminal: 'V1800001',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',
@@ -37,12 +37,12 @@ beforeEach(function () {
 });
 
 test('purchase returns signed PaymentRequest', function () {
-    $req = $this->resource->purchase(
+    $req = $this->resource->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: '10.50',
         order: '000001',
         description: 'Test payment',
         mInfo: ['cardholderName' => 'John Doe', 'email' => 'j@e.com'],
-    );
+    ));
 
     expect($req)->toBeInstanceOf(PaymentRequest::class);
     expect($req->getTransactionType())->toBe(TransactionType::Purchase);
@@ -56,22 +56,22 @@ test('purchase returns signed PaymentRequest', function () {
 });
 
 test('purchase rejects invalid amount', function () {
-    $this->resource->purchase(
+    $this->resource->purchase(new \Ux2Dev\Borica\Cgi\Request\Input\PaymentInput(
         amount: 'invalid',
         order: '000001',
         description: 'x',
         mInfo: ['cardholderName' => 'John', 'email' => 'j@e.com'],
-    );
+    ));
 })->throws(ConfigurationException::class);
 
 test('reverse returns signed ReversalRequest', function () {
-    $req = $this->resource->reverse(
+    $req = $this->resource->reverse(new \Ux2Dev\Borica\Cgi\Request\Input\ReferencedPaymentInput(
         amount: '10.50',
         order: '000001',
         rrn: '000000000001',
         intRef: 'ABC123',
         description: 'Refund',
-    );
+    ));
 
     expect($req)->toBeInstanceOf(ReversalRequest::class);
 

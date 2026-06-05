@@ -34,7 +34,7 @@ final readonly class PreAuthReversalRequest implements RequestInterface
         return TransactionType::PreAuthReversal;
     }
 
-    public function getSigningFields(): array
+    public function signingFields(): array
     {
         return [
             'TERMINAL' => $this->terminal,

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayErp\Dto;
 
-final readonly class AccountSyncStateCollection
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
+final readonly class AccountSyncStateCollection implements BoricaResult
 {
     /** @param array<int, AccountSyncState> $states */
     public function __construct(
@@ -12,7 +14,7 @@ final readonly class AccountSyncStateCollection
     ) {}
 
     /** @param array<string, mixed> $data */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         $states = [];
         foreach ((array) ($data['States'] ?? []) as $s) {

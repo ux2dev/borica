@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Ux2Dev\Borica\InfopayCheckout\Dto;
 
+use Ux2Dev\Borica\Contracts\BoricaResult;
+
 use Ux2Dev\Borica\InfopayCheckout\Enum\PaymentRequestStatusCode;
 use Ux2Dev\Borica\InfopayCheckout\Enum\PaymentStatusCode;
 
-final readonly class PaymentStatus
+final readonly class PaymentStatus implements BoricaResult
 {
     public function __construct(
         public ?PaymentRequestStatusEntry $paymentRequestStatus,
@@ -17,7 +19,7 @@ final readonly class PaymentStatus
     /**
      * @param array<string, mixed> $data
      */
-    public static function fromArray(array $data): self
+    public static function fromArray(array $data): static
     {
         $status = $data['status'] ?? [];
 

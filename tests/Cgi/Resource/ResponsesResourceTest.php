@@ -5,7 +5,7 @@ declare(strict_types=1);
 use Psr\Log\NullLogger;
 use Ux2Dev\Borica\Cgi\Resource\ResponsesResource;
 use Ux2Dev\Borica\Cgi\Response\Response;
-use Ux2Dev\Borica\Config\MerchantConfig;
+use Ux2Dev\Borica\Config\CgiConfig;
 use Ux2Dev\Borica\Enum\Currency;
 use Ux2Dev\Borica\Enum\Environment;
 use Ux2Dev\Borica\Enum\TransactionType;
@@ -16,7 +16,7 @@ beforeEach(function () {
     $privateKey = file_get_contents(__DIR__ . '/../../fixtures/test_private_key.pem');
     $this->publicKey = file_get_contents(__DIR__ . '/../../fixtures/test_public_key.pem');
 
-    $config = new MerchantConfig(
+    $config = new CgiConfig(
         terminal: 'V1800001',
         merchantId: 'MERCHANT01',
         merchantName: 'Test Shop',

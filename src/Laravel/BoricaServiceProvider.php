@@ -14,7 +14,12 @@ class BoricaServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__ . '/config/borica.php', 'borica');
 
         $this->app->singleton(BoricaManager::class, function ($app) {
-            return new BoricaManager($app['config']);
+            return new BoricaManager(
+                (array) $app['config']->get('borica', []),
+                $app->bound(\Psr\Http\Client\ClientInterface::class) ? $app->make(\Psr\Http\Client\ClientInterface::class) : null,
+                $app->bound(\Psr\Http\Message\RequestFactoryInterface::class) ? $app->make(\Psr\Http\Message\RequestFactoryInterface::class) : null,
+                $app->bound(\Psr\Http\Message\StreamFactoryInterface::class) ? $app->make(\Psr\Http\Message\StreamFactoryInterface::class) : null,
+            );
         });
 
         if (class_exists(\GuzzleHttp\Client::class)) {
